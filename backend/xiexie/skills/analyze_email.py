@@ -153,6 +153,13 @@ these patterns; they are not scams on their own):
 When in doubt between 'safe' and 'unclear', prefer 'unclear' with a sentence
 explaining the single ambiguity — never invent risks that aren't in the
 evidence above.
+
+OUTPUT FORMAT — non-negotiable:
+- Respond with a SINGLE JSON object matching the schema above.
+- No preamble, no markdown headings, no analysis prose, no code fences.
+- The very first character of your reply MUST be `{` and the last `}`.
+- All reasoning must be expressed inside `signs` and `speak_aloud` —
+  never as free text outside the JSON.
 """
 
 
@@ -350,6 +357,101 @@ def _strip_code_fence(raw: str) -> str:
     return raw
 
 
+def _extract_json_substring(raw: str) -> str | None:
+    """Find the first ``{`` and last ``}`` and return the slice between them.
+
+    A last-ditch rescue when the model wraps its JSON in commentary —
+    GLM-5.x sometimes does this despite an explicit ``response_format``.
+    """
+    if not raw:
+        return None
+    start = raw.find("{")
+    end = raw.rfind("}")
+    if start < 0 or end <= start:
+        return None
+    return raw[start : end + 1]
+
+
+_PROSE_VERDICT_RE = re.compile(
+    r"\b(phishing|suspicious|unclear|safe|clear)\b", re.I
+)
+_PROSE_CONFIDENCE_RE = re.compile(
+    r"\b(high|medium|low|very\s+high|very\s+low)\s*(?:confidence)?\b", re.I
+)
+_PROSE_SIGN_BULLET_RE = re.compile(
+    r"(?:^|\n)\s*(?:[-*\u2022]|\d+[.)])\s+(.{8,180}?)(?=\n|$)"
+)
+
+
+def _extract_verdict_from_prose(raw: str) -> dict[str, Any] | None:
+    """Last-ditch rescue: read the verdict label + signs out of free-text prose.
+
+    Triggered when the model returned a markdown analysis instead of JSON.
+    Returns ``None`` if no verdict label can be found — caller falls back to
+    ``DEFAULT_VERDICT``. We bias toward the *worst* verdict mentioned so a
+    "this is phishing, not safe" sentence reads as phishing, not safe.
+    """
+    if not raw or not raw.strip():
+        return None
+
+    text = raw.strip()
+    found = [m.group(1).lower() for m in _PROSE_VERDICT_RE.finditer(text)]
+    if not found:
+        return None
+    # ``clear`` is a synonym the spec uses for ``safe``; collapse here.
+    found = ["safe" if v == "clear" else v for v in found]
+    severity = {"safe": 0, "unclear": 1, "suspicious": 2, "phishing": 3}
+    verdict_label = max(found, key=lambda v: severity.get(v, -1))
+
+    confidence = "medium"
+    cm = _PROSE_CONFIDENCE_RE.search(text)
+    if cm:
+        c = cm.group(1).lower()
+        if "high" in c:
+            confidence = "high"
+        elif "low" in c:
+            confidence = "low"
+        else:
+            confidence = "medium"
+
+    signs = [
+        re.sub(r"\s+", " ", b).strip().rstrip(".") + "."
+        for b in _PROSE_SIGN_BULLET_RE.findall(text)
+    ]
+    # Drop duplicates while preserving order.
+    seen: set[str] = set()
+    deduped: list[str] = []
+    for s in signs:
+        key = s.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(s)
+    if not deduped:
+        # Use the first sentence as a fallback sign.
+        first_sentence = re.split(r"(?<=[.!?])\s+", text)[0].strip()
+        deduped = [first_sentence[:200]] if first_sentence else [
+            "model returned narrative analysis without explicit signs"
+        ]
+
+    speak = (
+        f"This one looks {verdict_label}. " + (deduped[0] if deduped else "")
+    ).strip()
+    actions = (
+        ["Don't click. Don't pay.", "Archive it.", "Tell Lisa."]
+        if verdict_label in ("phishing", "suspicious")
+        else ["No action needed — looks fine to me."]
+    )
+    return {
+        "verdict": verdict_label,
+        "confidence": confidence,
+        "signs": deduped[:5],
+        "recommended_actions": actions,
+        "speak_aloud": speak,
+        "_recovered_from": "prose",
+    }
+
+
 def _try_json_repair(raw: str) -> Any | None:
     """Attempt ``json_repair`` parse; lazily imported so the dep is optional.
 
@@ -444,10 +546,12 @@ def parse_verdict(raw: str) -> dict[str, Any]:
 
     Order of attempts:
     1. ``json.loads`` after stripping a code fence (the happy path).
-    2. ``json_repair.loads`` for nested or malformed JSON (lazy import; if
-       the lib is missing we degrade silently to the defaults).
-    3. Single-layer envelope unwrap (``{"output": {...}}`` etc.).
-    4. Schema validation with sensible defaults for missing keys.
+    2. ``json_repair.loads`` on the cleaned text.
+    3. Substring rescue: extract the slice between the first ``{`` and the
+       last ``}`` — handles models that wrap JSON in commentary despite an
+       explicit ``response_format``.
+    4. Single-layer envelope unwrap (``{"output": {...}}`` etc.).
+    5. Schema validation with sensible defaults for missing keys.
     """
     cleaned = _strip_code_fence(raw)
     parsed: Any = None
@@ -455,7 +559,20 @@ def parse_verdict(raw: str) -> dict[str, Any]:
         parsed = json.loads(cleaned)
     except json.JSONDecodeError:
         parsed = _try_json_repair(cleaned)
-    if parsed is None:
+    if parsed in (None, "", {}, []):
+        snippet = _extract_json_substring(cleaned)
+        if snippet:
+            try:
+                parsed = json.loads(snippet)
+            except json.JSONDecodeError:
+                parsed = _try_json_repair(snippet)
+    if parsed in (None, "", {}, []):
+        # Final rescue: GLM-5.x sometimes ignores ``response_format`` and
+        # returns a markdown analysis. Pull the verdict label + signs out
+        # of the prose so the demo isn't crippled by a chatty model.
+        prose = _extract_verdict_from_prose(cleaned)
+        if prose is not None:
+            return _validate_verdict(prose)
         return dict(DEFAULT_VERDICT)
     return _validate_verdict(parsed)
 
@@ -525,6 +642,7 @@ def analyze(message: dict[str, Any]) -> dict[str, Any]:
         ],
         temperature=0.1,
         max_tokens=700,
+        json_mode=True,
     )
 
     verdict = parse_verdict(resp.text or "")

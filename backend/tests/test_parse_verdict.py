@@ -130,6 +130,59 @@ def test_verdict_label_normalised() -> None:
     print("ok verdict_label_normalised")
 
 
+def test_extracts_json_from_prose() -> None:
+    """GLM-5.x sometimes prepends/appends commentary; we rescue the JSON."""
+    raw = (
+        "Here is the analysis you asked for:\n\n"
+        '{"verdict": "phishing", "confidence": "high", '
+        '"signs": ["typo domain"], "recommended_actions": ["Don\'t click."], '
+        '"speak_aloud": "This is a scam."}\n\n'
+        "Let me know if you want more detail."
+    )
+    v = parse_verdict(raw)
+    _check_shape(v)
+    assert v["verdict"] == "phishing"
+    assert v["confidence"] == "high"
+    print("ok extracts_json_from_prose")
+
+
+def test_recovers_verdict_from_pure_prose() -> None:
+    """When the model dumps a markdown analysis without any JSON, the prose
+    extractor must still recover a phishing verdict."""
+    raw = (
+        "**Sender domain:** aetnna-secure.com - this is a typosquatted domain.\n\n"
+        "**Authentication:** SPF=fail, DKIM=none, DMARC=fail.\n\n"
+        "**Confidence:** This is clearly phishing with high confidence.\n\n"
+        "1. Typosquatted domain (aetnna vs aetna)\n"
+        "2. All authentication checks failed\n"
+        "3. Asks for SSN and credit card together\n"
+    )
+    v = parse_verdict(raw)
+    _check_shape(v)
+    assert v["verdict"] == "phishing", v
+    assert v["confidence"] == "high", v
+    # At least one sign should mention typosquat or SSN.
+    assert any(
+        "typo" in s.lower() or "ssn" in s.lower() or "auth" in s.lower()
+        for s in v["signs"]
+    ), v["signs"]
+    print("ok recovers_verdict_from_pure_prose")
+
+
+def test_recovers_safe_from_prose() -> None:
+    raw = (
+        "After reviewing the email, this looks safe with high confidence.\n"
+        "- Sender matches the user's known account\n"
+        "- No urgent language\n"
+        "- Link points back to the same domain\n"
+    )
+    v = parse_verdict(raw)
+    _check_shape(v)
+    assert v["verdict"] == "safe", v
+    assert v["confidence"] == "high", v
+    print("ok recovers_safe_from_prose")
+
+
 def main() -> None:
     test_happy_path_plain_json()
     test_strips_code_fence()
@@ -140,6 +193,9 @@ def main() -> None:
     test_missing_keys_get_defaults()
     test_garbage_input_returns_default()
     test_verdict_label_normalised()
+    test_extracts_json_from_prose()
+    test_recovers_verdict_from_pure_prose()
+    test_recovers_safe_from_prose()
     print("all parse_verdict tests passed")
 
 

@@ -75,6 +75,7 @@ class LLMProvider:
         tools: list[dict[str, Any]] | None = None,
         temperature: float = 0.2,
         max_tokens: int = 1024,
+        json_mode: bool = False,
     ) -> LLMResponse:
         kwargs: dict[str, Any] = dict(
             model=self.model,
@@ -86,12 +87,26 @@ class LLMProvider:
             kwargs["tools"] = tools
             kwargs["tool_choice"] = "auto"
 
+        if json_mode:
+            # Honoured by GLM-5.x via the OpenAI-compatible field, OpenAI
+            # ``gpt-4o``, and the GOSIM proxy. Forces ``message.content`` to
+            # parse cleanly as JSON so ``analyze_email.parse_verdict`` sees
+            # a strict object instead of a markdown analysis block.
+            kwargs["response_format"] = {"type": "json_object"}
+
         # Disable GLM Thinking Mode so the chain-of-thought doesn't leak
         # into ``message.content``. Harmless no-op on non-GLM providers.
         if self.name == "zai":
             kwargs["extra_body"] = _GLM_NO_THINKING_EXTRA
 
-        resp = self.client.chat.completions.create(**kwargs)
+        try:
+            resp = self.client.chat.completions.create(**kwargs)
+        except TypeError:
+            # Older SDKs / proxies without ``response_format`` support — drop
+            # the field and retry. We still rely on ``parse_verdict`` to
+            # rescue narrative output downstream.
+            kwargs.pop("response_format", None)
+            resp = self.client.chat.completions.create(**kwargs)
         msg = resp.choices[0].message
         tool_calls = []
         for tc in (msg.tool_calls or []):
