@@ -22,6 +22,47 @@ from .registry import Skill, register
 
 URGENT_RE = re.compile(r"\b(urgent|immediately|expires?\s+today|verify\s+now|act\s+now)\b", re.I)
 
+# Brands the planner should recognise as targets of display-name spoofing
+# even when the user has no matching wiki/accounts.md entry. Keep tight —
+# false positives here are noisier than false negatives because the
+# verdict pipeline still has the cousin-domain + URL forensics signals.
+COMMON_BRANDS: dict[str, list[str]] = {
+    "aetna": ["aetna.com"],
+    "pg&e": ["pge.com"],
+    "pge": ["pge.com"],
+    "bank of america": ["bankofamerica.com", "bofa.com"],
+    "wells fargo": ["wellsfargo.com"],
+    "chase": ["chase.com", "jpmorganchase.com"],
+    "amazon": ["amazon.com"],
+    "apple": ["apple.com", "icloud.com"],
+    "paypal": ["paypal.com"],
+    "irs": ["irs.gov"],
+    "usps": ["usps.com"],
+    "fedex": ["fedex.com"],
+    "ups": ["ups.com"],
+    "netflix": ["netflix.com"],
+    "microsoft": ["microsoft.com"],
+    "google": ["google.com"],
+    "stanford": ["stanfordhealthcare.org", "stanford.edu"],
+}
+
+# Subdomain prefixes that are clearly transactional / safe when paired with
+# a known brand domain (``mail.aetna.com`` ≈ ``aetna.com``).
+SAFE_SUBDOMAIN_PREFIXES: tuple[str, ...] = (
+    "mail",
+    "email",
+    "notifications",
+    "noreply",
+    "no-reply",
+    "alerts",
+    "updates",
+    "billing",
+    "support",
+    "service",
+    "help",
+    "newsletter",
+)
+
 
 def _known_account_domains() -> set[str]:
     wiki = Wiki()
@@ -31,6 +72,74 @@ def _known_account_domains() -> set[str]:
     # Very cheap extraction: grab tokens that look like domains.
     domains = set(re.findall(r"\b[a-z0-9][a-z0-9\-]*\.[a-z]{2,}\b", page.body, re.I))
     return {d.lower() for d in domains}
+
+
+def _registrable_root(domain: str) -> str:
+    """Return the rightmost two labels — ``mail.aetna.com`` → ``aetna.com``.
+
+    Naïve eTLD handling. Good enough for our brand allowlist; for a true
+    Public Suffix List lookup we would pull in ``tldextract`` (cut from V1).
+    """
+    parts = (domain or "").lower().strip(".").split(".")
+    if len(parts) >= 2:
+        return ".".join(parts[-2:])
+    return parts[0] if parts else ""
+
+
+def _is_safe_subdomain_of(domain: str, brand_domains: list[str]) -> bool:
+    """``mail.aetna.com`` is OK for the brand ``aetna``."""
+    domain = (domain or "").lower().strip(".")
+    if not domain:
+        return False
+    for bd in brand_domains:
+        bd = bd.lower()
+        if domain == bd:
+            return True
+        if not domain.endswith("." + bd):
+            continue
+        prefix = domain[: -(len(bd) + 1)]  # strip trailing ".bd"
+        first_label = prefix.split(".")[0] if prefix else ""
+        if first_label in SAFE_SUBDOMAIN_PREFIXES:
+            return True
+    return False
+
+
+def _detect_display_name_spoof(
+    msg: dict[str, Any],
+    known_domains: set[str],
+) -> str | None:
+    """Return a signal sentence when ``from.name`` references a known brand
+    but the actual domain is neither in ``accounts.md`` nor a recognised
+    transactional subdomain of the brand.
+    """
+    sender = msg.get("from", {}) or {}
+    display = (sender.get("name") or "").lower()
+    sender_domain = (sender.get("domain") or "").lower().strip(".")
+    if not display or not sender_domain:
+        return None
+
+    sender_root = _registrable_root(sender_domain)
+    for brand, brand_domains in COMMON_BRANDS.items():
+        if brand not in display:
+            continue
+
+        # Direct match against the brand's official root → not spoofed.
+        if sender_root in brand_domains or sender_domain in brand_domains:
+            return None
+        # Recognised transactional subdomain of the brand → not spoofed.
+        if _is_safe_subdomain_of(sender_domain, brand_domains):
+            return None
+        # Wiki/accounts.md exact domain entry overrides — the user told
+        # Xiexie this domain is theirs, even if we don't recognise it.
+        if sender_root in known_domains or sender_domain in known_domains:
+            return None
+        # Display references the brand, sender domain doesn't → spoof.
+        return (
+            f"display name pretends to be {brand.title()} "
+            f"but the domain {sender_domain!r} doesn't match"
+        )
+
+    return None
 
 
 def _is_typosquat(domain: str, known: set[str]) -> bool:
@@ -60,6 +169,10 @@ def _suspicion_signals(msg: dict[str, Any], known_domains: set[str]) -> list[str
     sender_domain = (msg.get("from", {}).get("domain") or "").lower()
     if sender_domain and _is_typosquat(sender_domain, known_domains):
         signals.append(f"sender domain {sender_domain!r} looks like a typosquat")
+
+    spoof = _detect_display_name_spoof(msg, known_domains)
+    if spoof:
+        signals.append(spoof)
 
     subject = msg.get("subject") or ""
     if URGENT_RE.search(subject):
