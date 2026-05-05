@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "identifier": "ai.xiexie.desktop",
   "build": {
-    "beforeDevCommand": "cd ../../app && pnpm dev",
+    "beforeDevCommand": "if [ -d ../../app ]; then cd ../../app && pnpm dev; elif [ -d ../app ]; then cd ../app && pnpm dev; elif [ -d app ]; then cd app && pnpm dev; else echo 'app/ directory not found' >&2; exit 1; fi",
     "devUrl": "http://localhost:3000",
     "beforeBuildCommand": "if [ -x ../scripts/build-frontend.sh ]; then ../scripts/build-frontend.sh; elif [ -x scripts/build-frontend.sh ]; then scripts/build-frontend.sh; elif [ -x desktop/scripts/build-frontend.sh ]; then desktop/scripts/build-frontend.sh; else echo 'build-frontend.sh not found' >&2; exit 1; fi",
     "frontendDist": "../../app/out"
