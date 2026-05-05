@@ -25,6 +25,7 @@ from . import skills as _skills_pkg  # noqa: F401  # ensures registration side-e
 from .config import config
 from .memory import Wiki
 from .planner import Planner
+from .skills import analyze_email as _analyze_email
 from .skills.registry import SKILLS, call as call_skill
 from .voice.stt import transcribe_bytes
 
@@ -107,6 +108,7 @@ class PlanRunRequest(BaseModel):
 async def plan_and_run(req: PlanRunRequest) -> dict[str, Any]:
     plan = await asyncio.to_thread(planner().plan, req.text, req.history)
     results: list[dict[str, Any]] = []
+    followup_prompt: str | None = None
     for step in plan.steps:
         try:
             output = await asyncio.to_thread(call_skill, step.skill, step.arguments)
@@ -115,11 +117,24 @@ async def plan_and_run(req: PlanRunRequest) -> dict[str, Any]:
             # the verdict to every overlay subscriber on /ws.
             if step.skill == "analyze_email":
                 await bus.broadcast_verdict_if_any()
+                # Surface the chained follow-up question so HTTP callers
+                # (smoke tests, the demo CLI) can prompt the user in-line
+                # — same data the WS endpoint sends as a ``confirm`` frame.
+                followup = _analyze_email.peek_followup()
+                if followup and followup.get("prompt_user"):
+                    followup_prompt = followup["prompt_user"]
         except Exception as exc:  # noqa: BLE001
             results.append(
                 {"skill": step.skill, "args": step.arguments, "error": str(exc)}
             )
-    return {"speak": plan.speak, "steps": results, "raw": plan.raw_text}
+    payload: dict[str, Any] = {
+        "speak": plan.speak,
+        "steps": results,
+        "raw": plan.raw_text,
+    }
+    if followup_prompt:
+        payload["confirm"] = followup_prompt
+    return payload
 
 
 # ── WebSocket: live UI ────────────────────────────────────────────────────
@@ -173,6 +188,18 @@ async def ws_endpoint(ws: WebSocket) -> None:
                         # the warning halo lights up automatically.
                         if step.skill == "analyze_email":
                             await bus.broadcast_verdict_if_any()
+                            # Chained follow-up (Upgrade A): if the verdict
+                            # was phishing/suspicious, ``analyze_email``
+                            # stashed a suggestion to alert the family.
+                            # Render it as a ``confirm`` bubble *before*
+                            # the ``done`` frame so the panel asks Margaret
+                            # in-line — a short "yes" then triggers the
+                            # planner's early-return path.
+                            followup = _analyze_email.peek_followup()
+                            if followup and followup.get("prompt_user"):
+                                await ws.send_json(
+                                    {"type": "confirm", "text": followup["prompt_user"]}
+                                )
                     except Exception as exc:  # noqa: BLE001
                         await ws.send_json(
                             {"type": "skill_error", "name": step.skill, "error": str(exc)}

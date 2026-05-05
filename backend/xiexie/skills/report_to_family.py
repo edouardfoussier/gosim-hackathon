@@ -52,23 +52,63 @@ def _resolve_recipient(wiki: Wiki, name_hint: str | None) -> tuple[str, str | No
     return name, email_match.group(0) if email_match else None
 
 
-def _draft(verdict_summary: str, name: str) -> tuple[str, str]:
+def _normalise_summary(summary: Any) -> tuple[str, list[str]]:
+    """Return ``(text, signs)`` for either a bare string or a structured dict.
+
+    Two callers shapes are supported:
+
+    - ``"a one-paragraph string"``  → text with no bullets.
+    - ``{"text": "...", "signs": ["...", "..."]}`` → richer rendering with
+      a "What looked off" bullet list (max 3). Used by the chained
+      ``analyze_email`` follow-up so Lisa sees the same signs Xiexie said
+      out loud, not just the verbal paraphrase.
+
+    Anything else (None, lists, ints) collapses to an empty string.
+    """
+    if isinstance(summary, dict):
+        text = str(summary.get("text") or summary.get("summary") or "").strip()
+        raw_signs = summary.get("signs") or []
+        signs = [str(s).strip() for s in raw_signs if str(s).strip()][:3]
+        return text, signs
+    if isinstance(summary, str):
+        return summary.strip(), []
+    return "", []
+
+
+def _draft(text: str, signs: list[str], name: str) -> tuple[str, str]:
     subject = "Heads-up: I caught something in Mom's inbox"
-    body = (
-        f"Hi {name.split()[0]},\n\n"
-        "Xiexie (the AI helper on Mom's computer) flagged a suspicious email "
-        "this morning. Quick summary so you're in the loop:\n\n"
-        f"{verdict_summary.strip()}\n\n"
-        "Mom didn't click anything — Xiexie archived it. No action needed, "
-        "just wanted you to know in case she gets worried later.\n\n"
-        "— Xiexie"
+    lines: list[str] = [
+        f"Hi {name.split()[0]},",
+        "",
+        (
+            "Xiexie (the AI helper on Mom's computer) flagged a suspicious "
+            "email this morning. Quick summary so you're in the loop:"
+        ),
+        "",
+        text,
+    ]
+    if signs:
+        lines.extend(["", "What looked off:"])
+        for sign in signs:
+            lines.append(f"  • {sign}")
+    lines.extend(
+        [
+            "",
+            (
+                "Mom didn't click anything — Xiexie archived it. No action "
+                "needed, just wanted you to know in case she gets worried later."
+            ),
+            "",
+            "— Xiexie",
+        ]
     )
-    return subject, body
+    return subject, "\n".join(lines)
 
 
 def run(args: dict[str, Any]) -> str:
-    summary = str(args.get("summary", "")).strip()
-    if not summary:
+    raw_summary = args.get("summary", "")
+    text, signs = _normalise_summary(raw_summary)
+    if not text:
         return "What's the heads-up about? I need a one-line summary."
 
     name_hint = args.get("recipient_hint")
@@ -78,7 +118,7 @@ def run(args: dict[str, Any]) -> str:
         return "I don't know any family members yet — add one in wiki/family.md first."
 
     name, email = target
-    subject, body = _draft(summary, name)
+    subject, body = _draft(text, signs, name)
 
     if not email:
         return (
@@ -114,8 +154,29 @@ SKILL = register(
             "type": "object",
             "properties": {
                 "summary": {
-                    "type": "string",
-                    "description": "One-paragraph summary suitable for a family member.",
+                    # Accept either a plain string (legacy) or a structured
+                    # ``{"text": "...", "signs": ["...", "..."]}`` payload.
+                    # ``oneOf`` keeps both shapes legal for the planner;
+                    # ``run`` normalises them via ``_normalise_summary``.
+                    "oneOf": [
+                        {
+                            "type": "string",
+                            "description": "One-paragraph summary suitable for a family member.",
+                        },
+                        {
+                            "type": "object",
+                            "properties": {
+                                "text": {"type": "string"},
+                                "signs": {
+                                    "type": "array",
+                                    "items": {"type": "string"},
+                                    "description": "Up to 3 short signs to render as bullets in the email body.",
+                                },
+                            },
+                            "required": ["text"],
+                        },
+                    ],
+                    "description": "One-paragraph summary, or {text, signs} for a richer email body.",
                 },
                 "recipient_hint": {
                     "type": "string",

@@ -54,6 +54,15 @@ _LAST_VERDICT_LOCK = threading.Lock()
 _LAST_VERDICTS: list[dict[str, Any]] = []
 _MAX_STASHED_VERDICTS = 8
 
+# Separate single-slot stash for the *follow-up suggestion* derived from the
+# most recent actionable verdict. Lives apart from ``_LAST_VERDICTS`` because
+# the verdict stack is *consumed* by ``bus.broadcast_verdict_if_any`` (LIFO
+# pop), which would race with the planner's own peek/consume of the same
+# entry. This slot is peeked by the WS endpoint to send the ``confirm``
+# bubble and consumed by the planner when the user answers "yes".
+_LAST_FOLLOWUP_LOCK = threading.Lock()
+_LAST_FOLLOWUP: dict[str, Any] | None = None
+
 
 def _stash_verdict(message_id: str | None, verdict: dict[str, Any]) -> None:
     payload = {
@@ -78,6 +87,76 @@ def pop_last_verdict() -> dict[str, Any] | None:
     """
     with _LAST_VERDICT_LOCK:
         return _LAST_VERDICTS.pop() if _LAST_VERDICTS else None
+
+
+def stash_followup(followup: dict[str, Any]) -> None:
+    """Replace the pending follow-up suggestion (one slot, last write wins)."""
+    global _LAST_FOLLOWUP
+    with _LAST_FOLLOWUP_LOCK:
+        _LAST_FOLLOWUP = dict(followup)
+
+
+def peek_followup() -> dict[str, Any] | None:
+    """Return a copy of the pending follow-up without consuming it.
+
+    The WS endpoint uses this to render the ``confirm`` bubble *and* keep
+    the follow-up alive so the planner can fire it when the user says yes.
+    """
+    with _LAST_FOLLOWUP_LOCK:
+        return dict(_LAST_FOLLOWUP) if _LAST_FOLLOWUP else None
+
+
+def consume_followup() -> dict[str, Any] | None:
+    """Pop the pending follow-up (single-shot) and return it. None if empty."""
+    global _LAST_FOLLOWUP
+    with _LAST_FOLLOWUP_LOCK:
+        out = _LAST_FOLLOWUP
+        _LAST_FOLLOWUP = None
+        return out
+
+
+def clear_followup() -> None:
+    """Drop any pending follow-up — used when a new benign verdict supersedes."""
+    global _LAST_FOLLOWUP
+    with _LAST_FOLLOWUP_LOCK:
+        _LAST_FOLLOWUP = None
+
+
+# Verdict labels that should propose chaining ``report_to_family``. Anything
+# softer than ``suspicious`` doesn't warrant pulling Lisa into the loop.
+_FOLLOWUP_VERDICTS: tuple[str, ...] = ("phishing", "suspicious")
+# Family member to default to. Pulled from ``data/wiki/family.md`` (the
+# daughter is "Lisa Chen-Burrows"). Kept as the bare first name so
+# ``report_to_family._resolve_recipient`` can match either the section
+# heading "Lisa" or a future "Lisa Chen-Burrows" rename.
+_DEFAULT_FAMILY_HINT = "Lisa"
+
+
+def _build_followup(verdict: dict[str, Any]) -> dict[str, Any] | None:
+    """Derive the chained ``report_to_family`` suggestion from a verdict.
+
+    Returns ``None`` for benign verdicts so the planner doesn't accidentally
+    fire on a bare "yes" the user meant for something else.
+    """
+    label = str(verdict.get("verdict", "")).lower()
+    if label not in _FOLLOWUP_VERDICTS:
+        return None
+    speak = str(verdict.get("speak_aloud") or "").strip()
+    signs = [str(s).strip() for s in (verdict.get("signs") or []) if str(s).strip()][:3]
+    return {
+        "skill": "report_to_family",
+        "args": {
+            # Pass a structured summary so report_to_family can render the
+            # signs as bullets in the email body. The string-only path is
+            # still supported for backward compat (see report_to_family.py).
+            "summary": {
+                "text": speak[:280],
+                "signs": signs,
+            },
+            "recipient_hint": _DEFAULT_FAMILY_HINT,
+        },
+        "prompt_user": "Want me to send Lisa a heads-up about this?",
+    }
 
 ALLOWED_VERDICTS: tuple[str, ...] = ("safe", "unclear", "suspicious", "phishing")
 ALLOWED_CONFIDENCE: tuple[str, ...] = ("low", "medium", "high")
@@ -654,6 +733,13 @@ def analyze(message: dict[str, Any]) -> dict[str, Any]:
         "cousin_domain_check": cousin_check,
         "message_id": message.get("id"),
     }
+
+    # Attach the chained follow-up suggestion (None for benign verdicts).
+    # Carrying it on the verdict dict means downstream consumers (logs,
+    # debug dumps) see the proposed next step alongside the reasoning.
+    followup = _build_followup(verdict)
+    if followup is not None:
+        verdict["_followup"] = followup
     return verdict
 
 
@@ -670,6 +756,15 @@ def run(args: dict[str, Any]) -> str:
     # automatically when the analysis returns. ``pop_last_verdict`` is
     # consumed inside the ``/ws`` endpoint right after this skill returns.
     _stash_verdict(message_id, verdict)
+
+    # Stash the chained follow-up in its own slot so the planner can pick
+    # it up when the user answers the ``confirm`` bubble with "yes". A
+    # benign verdict supersedes any stale pending follow-up.
+    followup = verdict.get("_followup")
+    if followup:
+        stash_followup(followup)
+    else:
+        clear_followup()
 
     lines = [
         f"VERDICT: {verdict.get('verdict', 'unclear')}  (confidence: {verdict.get('confidence', 'low')})"

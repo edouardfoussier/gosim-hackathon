@@ -13,13 +13,47 @@ inserting confirmation prompts for ``destructive`` skills.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from typing import Any
 
 from ..llm import get_provider
 from ..memory import Wiki
-from ..skills import SKILLS
+from ..skills import SKILLS, analyze_email as _analyze_email
 from ..skills.registry import all_tool_schemas
+
+# Short affirmative phrases that mean "fire the pending follow-up". Kept
+# permissive on punctuation/casing so "Yes please." and "yeah, go ahead!"
+# both match. Anything longer than ~6 words goes through the regular
+# GLM-routed path so we never short-circuit a real instruction.
+_AFFIRMATIVE_RE = re.compile(
+    r"""^\s*(?:
+        yes(?:\s*please)?(?:\s+(?:do(?:\s+it)?|go(?:\s+ahead)?))?
+      | yes(?:\s+(?:she|he|them|that|sure))?
+      | yeah | yep | yup
+      | sure(?:\s+(?:thing|please))?
+      | okay | ok | k
+      | go(?:\s+ahead)?
+      | do\s+it
+      | please\s+do
+      | sounds\s+good
+    )\s*[.!?]?\s*$""",
+    re.IGNORECASE | re.VERBOSE,
+)
+
+
+def _is_short_affirmative(text: str) -> bool:
+    """Return True for ~6-word-or-less affirmative replies (yes / go ahead / …).
+
+    Used by ``Planner.plan`` to short-circuit a pending follow-up suggestion
+    without paying a second LLM round-trip on every "yes please".
+    """
+    if not text:
+        return False
+    cleaned = text.strip()
+    if not cleaned or len(cleaned.split()) > 6:
+        return False
+    return _AFFIRMATIVE_RE.match(cleaned) is not None
 
 # Sentinel tool: GLM-5.1 on the GOSIM proxy ignores ``tool_choice="auto"``
 # and never dispatches when given the choice — it always narrates instead.
@@ -135,6 +169,27 @@ class Planner:
         )
 
     def plan(self, transcript: str, history: list[dict[str, Any]] | None = None) -> PlanResult:
+        # ── Early return: short affirmative + a pending follow-up ──────────
+        # ``analyze_email`` stashes a single-shot follow-up suggestion when
+        # the verdict is phishing/suspicious. The WS endpoint shows the
+        # user a ``confirm`` bubble like "Want me to send Lisa a heads-up?".
+        # When the user replies with a short "yes" / "go ahead", we don't
+        # need to round-trip through GLM — we already know the exact
+        # skill+args. Skip the destructive confirmation gate too: the user
+        # just answered the gate when they said yes.
+        if _is_short_affirmative(transcript):
+            followup = _analyze_email.consume_followup()
+            if followup and followup.get("skill") in SKILLS:
+                steps = [
+                    PlanStep(
+                        skill=followup["skill"],
+                        arguments=dict(followup.get("args") or {}),
+                        speak_before=None,
+                    )
+                ]
+                spoken = "On it — drafting that note now."
+                return PlanResult(speak=spoken, steps=steps, raw_text="")
+
         sys_prompt = PLANNER_SYSTEM.format(wiki=self.wiki.as_planner_context())
         messages: list[dict[str, Any]] = [{"role": "system", "content": sys_prompt}]
         if history:
