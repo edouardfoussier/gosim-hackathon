@@ -34,6 +34,28 @@ from ..memory import Wiki
 from . import _inbox, check_url as _check_url, search_scam_intel as _intel
 from .registry import Skill, register
 
+EXPECTED_KEYS: tuple[str, ...] = (
+    "verdict",
+    "confidence",
+    "signs",
+    "recommended_actions",
+    "speak_aloud",
+)
+ALLOWED_VERDICTS: tuple[str, ...] = ("safe", "unclear", "suspicious", "phishing")
+ALLOWED_CONFIDENCE: tuple[str, ...] = ("low", "medium", "high")
+DEFAULT_VERDICT: dict[str, Any] = {
+    "verdict": "unclear",
+    "confidence": "low",
+    "signs": [
+        "I couldn't reach a clear conclusion — the model returned malformed output."
+    ],
+    "recommended_actions": ["Don't click anything; ask someone you trust to look."],
+    "speak_aloud": (
+        "I'm not sure about this one. The safest thing is to not click "
+        "any links and check with someone you trust before acting."
+    ),
+}
+
 ANALYZE_SYSTEM = """\
 You are Xiexie's email forensics agent. The user is a senior. You receive:
 - the email object (headers, sender, subject, body, links)
@@ -96,6 +118,130 @@ evidence above.
 """
 
 
+def _strip_code_fence(raw: str) -> str:
+    """Strip a leading ```json fence from an LLM response if present."""
+    raw = raw.strip()
+    if not raw.startswith("```"):
+        return raw
+    raw = raw.strip("` \n")
+    if raw.lower().startswith("json"):
+        raw = raw[4:].lstrip()
+    # Some models close with another fence inside the body.
+    if raw.endswith("```"):
+        raw = raw[:-3].rstrip()
+    return raw
+
+
+def _try_json_repair(raw: str) -> Any | None:
+    """Attempt ``json_repair`` parse; lazily imported so the dep is optional.
+
+    Returns the parsed object on success, ``None`` when the library is
+    unavailable, the parse fails, or the result is empty. The original
+    fall-through to ``DEFAULT_VERDICT`` keeps the skill usable even if
+    ``json-repair`` was not installed.
+    """
+    try:
+        from json_repair import loads as _repair_loads  # type: ignore
+    except Exception:  # noqa: BLE001 — optional dep
+        return None
+    try:
+        out = _repair_loads(raw)
+    except Exception:  # noqa: BLE001
+        return None
+    # ``json_repair`` returns ``""`` for hopeless inputs.
+    if out == "" or out is None:
+        return None
+    return out
+
+
+def _unwrap_envelope(obj: Any) -> Any:
+    """Unwrap a single layer of common LLM-output envelopes.
+
+    Recognises ``{"verdict": {...}}``, ``{"output": {...}}``, ``{"data": {...}}``
+    when the inner dict already carries verdict-shaped keys. Stops after one
+    unwrap so a legitimate top-level ``verdict`` field (the literal string
+    "phishing") is never mistaken for a wrapper.
+    """
+    if not isinstance(obj, dict):
+        return obj
+    for key in ("output", "data", "result"):
+        inner = obj.get(key)
+        if isinstance(inner, dict) and any(k in inner for k in EXPECTED_KEYS):
+            return inner
+    inner = obj.get("verdict")
+    # Only unwrap when the *inner* dict itself has a verdict key (e.g. nested
+    # ``{"verdict": {"verdict": "phishing", ...}}``). A bare string verdict
+    # at this level is the legitimate top-level shape.
+    if isinstance(inner, dict) and "verdict" in inner:
+        return inner
+    return obj
+
+
+def _coerce_str_list(value: Any, *, fallback: list[str]) -> list[str]:
+    if isinstance(value, list):
+        out = [str(item).strip() for item in value if str(item).strip()]
+        return out or fallback
+    if isinstance(value, str) and value.strip():
+        return [value.strip()]
+    return fallback
+
+
+def _validate_verdict(obj: Any) -> dict[str, Any]:
+    """Coerce the parsed object into the documented schema, filling defaults."""
+    if not isinstance(obj, dict):
+        return dict(DEFAULT_VERDICT)
+    obj = _unwrap_envelope(obj)
+    if not isinstance(obj, dict):
+        return dict(DEFAULT_VERDICT)
+
+    verdict_label = str(obj.get("verdict", "")).strip().lower()
+    if verdict_label not in ALLOWED_VERDICTS:
+        verdict_label = DEFAULT_VERDICT["verdict"]
+
+    confidence = str(obj.get("confidence", "")).strip().lower()
+    if confidence not in ALLOWED_CONFIDENCE:
+        confidence = DEFAULT_VERDICT["confidence"]
+
+    signs = _coerce_str_list(obj.get("signs"), fallback=list(DEFAULT_VERDICT["signs"]))
+    actions = _coerce_str_list(
+        obj.get("recommended_actions"),
+        fallback=list(DEFAULT_VERDICT["recommended_actions"]),
+    )
+
+    speak = obj.get("speak_aloud")
+    if not isinstance(speak, str) or not speak.strip():
+        speak = DEFAULT_VERDICT["speak_aloud"]
+
+    return {
+        "verdict": verdict_label,
+        "confidence": confidence,
+        "signs": signs[:5],
+        "recommended_actions": actions[:5],
+        "speak_aloud": speak.strip(),
+    }
+
+
+def parse_verdict(raw: str) -> dict[str, Any]:
+    """Robust LLM → verdict-dict conversion.
+
+    Order of attempts:
+    1. ``json.loads`` after stripping a code fence (the happy path).
+    2. ``json_repair.loads`` for nested or malformed JSON (lazy import; if
+       the lib is missing we degrade silently to the defaults).
+    3. Single-layer envelope unwrap (``{"output": {...}}`` etc.).
+    4. Schema validation with sensible defaults for missing keys.
+    """
+    cleaned = _strip_code_fence(raw)
+    parsed: Any = None
+    try:
+        parsed = json.loads(cleaned)
+    except json.JSONDecodeError:
+        parsed = _try_json_repair(cleaned)
+    if parsed is None:
+        return dict(DEFAULT_VERDICT)
+    return _validate_verdict(parsed)
+
+
 def _build_user_prompt(message: dict[str, Any], url_reports: list[dict[str, Any]],
                        intel: list[dict[str, str]], sender_rep: dict[str, Any],
                        wiki: Wiki) -> str:
@@ -151,26 +297,7 @@ def analyze(message: dict[str, Any]) -> dict[str, Any]:
         max_tokens=700,
     )
 
-    raw = resp.text.strip()
-    # Strip optional ```json fences
-    if raw.startswith("```"):
-        raw = raw.strip("` \n")
-        if raw.lower().startswith("json"):
-            raw = raw[4:].lstrip()
-
-    try:
-        verdict = json.loads(raw)
-    except json.JSONDecodeError:
-        verdict = {
-            "verdict": "unclear",
-            "confidence": "low",
-            "signs": ["I couldn't reach a clear conclusion — the model returned malformed output."],
-            "recommended_actions": ["Don't click anything; ask someone you trust to look."],
-            "speak_aloud": (
-                "I'm not sure about this one. The safest thing is to not click "
-                "any links and check with someone you trust before acting."
-            ),
-        }
+    verdict = parse_verdict(resp.text or "")
 
     verdict["_evidence"] = {
         "url_reports": url_reports,

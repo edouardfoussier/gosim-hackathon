@@ -34,6 +34,8 @@ dependencies = [
     "mss>=10",
     # scam-shield deps
     "beautifulsoup4>=4.12",
+    # robust LLM-output JSON parsing (graceful no-op if uninstalled)
+    "json-repair>=0.30",
     # browser automation (heavy — install separately if needed)
     # "browser-use>=0.1.40",
     # "playwright>=1.49",
