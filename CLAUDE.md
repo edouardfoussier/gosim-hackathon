@@ -284,9 +284,16 @@ not a slideshow.
 System Settings → Privacy & Security:
 - [ ] Microphone → Terminal + Cursor + (Tauri later)
 - [ ] Accessibility → Terminal + Cursor (for pyautogui keyboard)
+- [ ] **Input Monitoring** → Terminal + Cursor (for the ctrl+option PTT tap)
 - [ ] Automation → Terminal → System Events, Mail, Reminders, Calendar, Chrome
 - [ ] Screen Recording → Terminal + Cursor (if vision agent reads desktop)
 - [ ] Full Disk Access → Terminal (mdfind across `~/Documents/` etc.)
+
+Wake-word setup (optional but recommended for demo):
+- [ ] Set `PICOVOICE_ACCESS_KEY` in `.env` (free at https://console.picovoice.ai)
+- [ ] Train a custom `xiexie` keyword in the Picovoice console and drop the
+      generated `.ppn` at `models/xiexie_mac.ppn` (or override with
+      `XIEXIE_PPN_PATH`). Without it we fall back to built-in `"computer"`.
 
 Test command:
 ```bash
@@ -388,6 +395,19 @@ Two parallel paths so we never lack a fallback for the warning UX:
   Clicky-style macOS overlay (PyQt6 → PyObjC → Tauri+nspanel, in that
   order of feasibility). If it lands by J2 morning, we merge for the wow
   factor. If it doesn't, the `main` fallback is already shipping.
+
+### 2026-05-05 (mid-afternoon) — Voice activation: Porcupine wake-word + PTT fallback
+Two-path activation so the demo never depends on a single trigger:
+1. **Wake-word** via Picovoice Porcupine — custom `xiexie_mac.ppn` if present,
+   built-in `"computer"` if not, silent no-op if `PICOVOICE_ACCESS_KEY`
+   missing. Keeps the "just say *Xiexie*" UX promise.
+2. **Push-to-talk** via a listen-only Quartz `CGEventTap` watching for
+   `ctrl+option` (same pattern as Clicky's
+   `GlobalPushToTalkShortcutMonitor.swift`). Always-on safety net for the
+   noisy Station F demo room.
+Both paths run on daemon threads; `voice.start_voice_triggers(on_activate)`
+wires them to a single callback. Lazy imports throughout — modules load
+even if `pvporcupine` / `sounddevice` / `Quartz` are missing.
 
 ### 2026-05-05 (early afternoon) — Three prior-art research sub-agents in flight
 Read-only research on Guardian Angel, VerdictMail, PhishNet runs in
