@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Xiexie 谢谢 — design directions</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fraunces:ital,opsz,wght@0,9..144,300..700;1,9..144,300..700&family=Noto+Serif+SC:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <style>
+    html, body { margin: 0; padding: 0; background: #f0eee9; }
+    body { font-family: Inter, system-ui, sans-serif; color: #1f1a14; }
+    *, *::before, *::after { box-sizing: border-box; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+  <script type="text/babel" src="design-canvas.jsx"></script>
+  <script type="text/babel" src="tweaks-panel.jsx"></script>
+  <script type="text/babel" src="covers.jsx"></script>
+  <script type="text/babel" src="verdict.jsx"></script>
+  <script type="text/babel" src="glyphs.jsx"></script>
+
+  <script type="text/babel">
+    const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+      "verdictVariant": "all",
+      "fontScale": 1.15
+    }/*EDITMODE-END*/;
+
+    function App() {
+      const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
+      const showAll = t.verdictVariant === 'all';
+      const variants = showAll
+        ? ['phishing', 'suspicious', 'safe']
+        : [t.verdictVariant];
+
+      return (
+        <>
+          <DesignCanvas>
+            <DCSection id="covers" title="Cover slide directions" subtitle="Three rhetorical takes — same brand, different lean. 1280×720.">
+              <DCArtboard id="hearth" label="A · Hearth" width={1280} height={720}>
+                <CoverHearth />
+              </DCArtboard>
+              <DCArtboard id="bilingual" label="B · Bilingual lockup" width={1280} height={720}>
+                <CoverBilingual />
+              </DCArtboard>
+              <DCArtboard id="letter" label="C · Letter from a grandchild" width={1280} height={720}>
+                <CoverLetter />
+              </DCArtboard>
+            </DCSection>
+
+            <DCSection id="verdict" title="Verdict Card · the senior-facing hero" subtitle="Floating card. 18pt+ body, 56px touch targets, no padlocks, no DANGER copy.">
+              {variants.map((v) => (
+                <DCArtboard key={v} id={`verdict-${v}`} label={`${v[0].toUpperCase()+v.slice(1)} variant`} width={760} height={980}>
+                  <VerdictCard variant={v} scale={t.fontScale} />
+                </DCArtboard>
+              ))}
+            </DCSection>
+
+            <DCSection id="glyphs" title="Overlay glyphs" subtitle="Visual references to port to PyQt6. 48×48 native, shown 3× for legibility. Pulse + bob animations live.">
+              <DCArtboard id="g-phish" label="Phishing · pulse 1.4s" width={360} height={480}>
+                <GlyphCard kind="phishing" />
+              </DCArtboard>
+              <DCArtboard id="g-sus" label="Suspicious · bob 2s" width={360} height={480}>
+                <GlyphCard kind="suspicious" />
+              </DCArtboard>
+              <DCArtboard id="g-safe" label="Safe · static" width={360} height={480}>
+                <GlyphCard kind="safe" />
+              </DCArtboard>
+            </DCSection>
+          </DesignCanvas>
+
+          <TweaksPanel title="Xiexie · tweaks">
+            <TweakSection label="Verdict Card" />
+            <TweakRadio label="Show variant" value={t.verdictVariant}
+              options={[
+                { value: 'all', label: 'All' },
+                { value: 'phishing', label: 'Phish' },
+                { value: 'suspicious', label: 'Susp.' },
+                { value: 'safe', label: 'Safe' },
+              ]}
+              onChange={(v) => setTweak('verdictVariant', v)} />
+            <TweakSlider label="Body type scale" value={t.fontScale}
+              min={0.85} max={1.5} step={0.05} unit="×"
+              onChange={(v) => setTweak('fontScale', v)} />
+            <TweakSection label="Notes" />
+            <div style={{ fontSize: 11.5, lineHeight: 1.5, color: 'rgba(41,38,27,.7)' }}>
+              Click any artboard label or its expand button to focus it full-screen. Pinch / scroll-wheel to zoom the canvas.
+            </div>
+          </TweaksPanel>
+        </>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>

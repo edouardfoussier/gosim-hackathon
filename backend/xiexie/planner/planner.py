@@ -116,20 +116,22 @@ class Planner:
     def __init__(self, wiki: Wiki | None = None, dispatch_model: str | None = None):
         self.wiki = wiki or Wiki()
         self.llm = get_provider()
-        # GLM-5.1 on the GOSIM proxy (api.r9s.ai/v1) does NOT reliably emit
-        # tool_calls — it narrates instead, even when ``tool_choice`` is
-        # set to ``"required"`` or to a specific function. Empirically
-        # ``deepseek-v4-pro`` on the same proxy dispatches cleanly. We keep
-        # GLM-5.1 for the verdict reasoning in ``analyze_email`` (the
-        # sponsor-prestige slot) and route only the planner's
-        # tool-dispatch call through DeepSeek. Override with the
-        # ``dispatch_model`` argument or ``XIEXIE_PLANNER_MODEL`` env var.
+        # On direct Z.AI (``api.z.ai/api/paas/v4``) GLM-4.6 dispatches
+        # tool_calls cleanly — no override needed. The GOSIM proxy
+        # (``api.r9s.ai/v1``) has a buggy tool-call relay for GLM, so on
+        # that base URL we route the planner through DeepSeek-V4-Pro
+        # which dispatches every skill reliably. ``XIEXIE_PLANNER_MODEL``
+        # forces a specific dispatch model regardless of base URL.
         import os
 
+        base_url = str(getattr(self.llm.client, "base_url", "")).lower()
+        proxy_dispatch_default = (
+            "deepseek-v4-pro" if "r9s.ai" in base_url else None
+        )
         self.dispatch_model = (
             dispatch_model
             or os.getenv("XIEXIE_PLANNER_MODEL")
-            or ("deepseek-v4-pro" if self.llm.name == "zai" else None)
+            or proxy_dispatch_default
         )
 
     def plan(self, transcript: str, history: list[dict[str, Any]] | None = None) -> PlanResult:
