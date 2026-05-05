@@ -31,6 +31,7 @@ Implementation policy:
 
 from __future__ import annotations
 
+import datetime as dt
 import re
 import socket
 from typing import Any
@@ -40,6 +41,10 @@ import httpx
 
 from ..external import safe_browsing, urlscan as urlscan_api
 from .registry import Skill, register
+
+# Hosts we never bother whois-ing — these have hand-curated mock fixtures
+# whose ``verdict_features`` already include the domain-age sentence.
+_WHOIS_SKIP_HOSTS: tuple[str, ...] = ("aetnna-secure.com",)
 
 # ── demo-time mock fixtures ───────────────────────────────────────────────
 MOCK_URLS: dict[str, dict[str, Any]] = {
@@ -135,13 +140,70 @@ def _real_fetch(url: str, timeout: float = 6.0) -> dict[str, Any]:
     }
 
 
+def _whois_age_days(host: str) -> int | None:
+    """Best-effort domain age in days via the optional ``python-whois`` lib.
+
+    Returns ``None`` when the lib is missing, the host is in the skip list,
+    the lookup raises, or the registrar didn't return a ``creation_date``.
+    Never raises — callers can drop the result without guarding.
+    """
+    if not host or any(host.endswith(skip) for skip in _WHOIS_SKIP_HOSTS):
+        return None
+    try:
+        import whois  # type: ignore
+    except Exception:  # noqa: BLE001 — optional dep
+        return None
+    try:
+        record = whois.whois(host)
+    except Exception:  # noqa: BLE001 — many whois failures bubble up as generic exceptions
+        return None
+    created = getattr(record, "creation_date", None) or (
+        record.get("creation_date") if isinstance(record, dict) else None
+    )
+    # Some TLDs return a list of dates; take the earliest.
+    if isinstance(created, list):
+        created = next((c for c in created if c), None)
+    if created is None:
+        return None
+    if isinstance(created, str):
+        for fmt in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+            try:
+                created = dt.datetime.strptime(created, fmt)
+                break
+            except ValueError:
+                continue
+        else:
+            return None
+    if not isinstance(created, dt.datetime):
+        return None
+    if created.tzinfo is not None:
+        created = created.astimezone(dt.timezone.utc).replace(tzinfo=None)
+    age = (dt.datetime.utcnow() - created).days
+    return age if age >= 0 else None
+
+
 def _enrich_with_external(url: str, data: dict[str, Any]) -> dict[str, Any]:
-    """Add Google Safe Browsing + urlscan.io signals when keys are configured.
+    """Add Google Safe Browsing + urlscan.io + whois signals.
 
     These are *additive*; the mock fixture (for our demo URL) and the no-JS
     fetch path (for everything else) remain authoritative for the structured
     forensic fields.
     """
+    # Mock-sourced data already carries an authoritative ``verdict_features``
+    # block (the demo fixture). Skip whois entirely so the demo never blocks
+    # on the network at Station F.
+    if data.get("source") != "mock":
+        final_url = data.get("final_url") or url
+        final_host = (urlparse(final_url).hostname or urlparse(url).hostname or "").lower()
+        if final_host:
+            age = _whois_age_days(final_host)
+            if age is not None:
+                data["domain_registered_days_ago"] = age
+                if age < 60 and "verdict_features" in data:
+                    data["verdict_features"].append(
+                        f"domain {final_host} registered {age} days ago (very new)"
+                    )
+
     gsb = safe_browsing.lookup(url)
     if gsb.get("available"):
         data["safe_browsing"] = gsb
@@ -205,6 +267,10 @@ def run(args: dict[str, Any]) -> str:
         n = len(scans.get("malicious_scans") or [])
         total = scans.get("total_recent_scans") or 0
         summary_lines.append(f"urlscan.io history: {n}/{total} prior scans flagged malicious")
+    if data.get("domain_registered_days_ago") is not None:
+        summary_lines.append(
+            f"Domain age (whois): {data['domain_registered_days_ago']} days"
+        )
     if data.get("error"):
         summary_lines.append(f"(fetch error: {data['error']})")
     return "\n".join(summary_lines)

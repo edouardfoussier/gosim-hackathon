@@ -36,6 +36,9 @@ dependencies = [
     "beautifulsoup4>=4.12",
     # robust LLM-output JSON parsing (graceful no-op if uninstalled)
     "json-repair>=0.30",
+    # whois lookups for domain-age signal (graceful no-op if uninstalled
+    # or if upstream whois servers are unreachable from the demo machine)
+    "python-whois>=0.9",
     # browser automation (heavy — install separately if needed)
     # "browser-use>=0.1.40",
     # "playwright>=1.49",
