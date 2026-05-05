@@ -69,15 +69,18 @@ BRAND_AMBER = QColor("#d97a25")
 BRAND_CREAM = QColor("#fbf7f0")
 BRAND_FOREST = QColor("#2f6d3f")
 BRAND_CRIMSON = QColor("#b8351c")
+# Symbol cream (slightly warmer than BRAND_CREAM so it pops on the fill
+# without ever going pure white) — matches the Claude Design canvas.
+SYMBOL_CREAM = QColor("#fff8eb")
+SAFE_STROKE = QColor("#f1f7ec")
 
 
 @dataclass(frozen=True)
 class GlyphTheme:
     fill: QColor
-    border: QColor
     glow: QColor | None  # ``None`` → no outer glow / pulse
     symbol_color: QColor
-    symbol: str
+    symbol: Literal["bang", "question", "check"]
     shape: Literal["triangle", "circle"]
     label: str
 
@@ -85,28 +88,25 @@ class GlyphTheme:
 THEMES: dict[str, GlyphTheme] = {
     "phishing": GlyphTheme(
         fill=BRAND_CRIMSON,
-        border=QColor("#7a1f10"),
         glow=BRAND_CRIMSON,
-        symbol_color=BRAND_CREAM,
-        symbol="!",
+        symbol_color=SYMBOL_CREAM,
+        symbol="bang",
         shape="triangle",
         label="Phishing",
     ),
     "suspicious": GlyphTheme(
         fill=BRAND_AMBER,
-        border=QColor("#8a4316"),
         glow=None,
-        symbol_color=BRAND_CREAM,
-        symbol="?",
+        symbol_color=SYMBOL_CREAM,
+        symbol="question",
         shape="circle",
         label="Suspicious",
     ),
     "clear": GlyphTheme(
         fill=BRAND_FOREST,
-        border=QColor("#1f4828"),
         glow=None,
-        symbol_color=BRAND_CREAM,
-        symbol="✓",
+        symbol_color=SAFE_STROKE,
+        symbol="check",
         shape="circle",
         label="Clear",
     ),
@@ -123,58 +123,101 @@ WINDOW_H = 220
 
 
 # ── geometry helpers ───────────────────────────────────────────────────
-def _rounded_polygon(points: list[QPointF], radius: float) -> QPainterPath:
-    """Build a closed ``QPainterPath`` that traces ``points`` with rounded
-    corners. Uses a quadratic bezier at every vertex so the curvature is
-    visually identical to CSS ``border-radius`` on a polygon.
+# All shape paths below are written in the same 48×48 viewBox the Claude
+# Design canvas uses, then scaled to ``side_px`` at render time. Reusing
+# the canvas coordinates verbatim guarantees the icon set stays visually
+# identical to the React mocks in ``Xiexie_claudedesign/glyphs.jsx``.
+_VIEWBOX = 48.0
+
+
+def _scaled(side_px: int) -> float:
+    """Conversion factor from the 48-unit canvas to the target pixel size."""
+    return side_px / _VIEWBOX
+
+
+def _triangle_path(side_px: int) -> QPainterPath:
+    """Crimson phishing triangle, exact port of the Claude-Design SVG path:
+
+    ``M24 5.4 L43 39.6 Q44.2 41.7 41.8 41.7 L6.2 41.7 Q3.8 41.7 5 39.6 Z``
+
+    Sharp apex (a triangle with rounded apex looks like a teardrop), gentle
+    quadratic bezier on the two base corners.
     """
-    n = len(points)
+    s = _scaled(side_px)
     path = QPainterPath()
-    for i in range(n):
-        curr = points[i]
-        prev = points[(i - 1) % n]
-        nxt = points[(i + 1) % n]
-        v_in = QPointF(prev.x() - curr.x(), prev.y() - curr.y())
-        v_out = QPointF(nxt.x() - curr.x(), nxt.y() - curr.y())
-        l_in = math.hypot(v_in.x(), v_in.y()) or 1.0
-        l_out = math.hypot(v_out.x(), v_out.y()) or 1.0
-        r = min(radius, l_in / 2.0, l_out / 2.0)
-        in_pt = QPointF(
-            curr.x() + v_in.x() * r / l_in,
-            curr.y() + v_in.y() * r / l_in,
-        )
-        out_pt = QPointF(
-            curr.x() + v_out.x() * r / l_out,
-            curr.y() + v_out.y() * r / l_out,
-        )
-        if i == 0:
-            path.moveTo(in_pt)
-        else:
-            path.lineTo(in_pt)
-        path.quadTo(curr, out_pt)
+    path.moveTo(24.0 * s, 5.4 * s)
+    path.lineTo(43.0 * s, 39.6 * s)
+    path.quadTo(44.2 * s, 41.7 * s, 41.8 * s, 41.7 * s)
+    path.lineTo(6.2 * s, 41.7 * s)
+    path.quadTo(3.8 * s, 41.7 * s, 5.0 * s, 39.6 * s)
     path.closeSubpath()
     return path
 
 
-def _rounded_triangle_path(rect: QRectF, radius: float) -> QPainterPath:
-    """Upward-pointing triangle inscribed in ``rect`` with rounded corners."""
-    cx = rect.center().x()
-    return _rounded_polygon(
-        [
-            QPointF(cx, rect.top()),
-            QPointF(rect.right(), rect.bottom()),
-            QPointF(rect.left(), rect.bottom()),
-        ],
-        radius,
-    )
+def _circle_path(side_px: int) -> QPainterPath:
+    """Centred circle of radius 19 in the 48-unit canvas (≈ 79 % of the side)."""
+    s = _scaled(side_px)
+    cx, cy, r = 24.0 * s, 24.0 * s, 19.0 * s
+    path = QPainterPath()
+    path.addEllipse(QPointF(cx, cy), r, r)
+    return path
+
+
+def _draw_bang(painter: QPainter, color: QColor, side_px: int) -> None:
+    """The ``!`` symbol drawn as a rounded vertical pill + a small dot."""
+    s = _scaled(side_px)
+    painter.setPen(Qt.PenStyle.NoPen)
+    painter.setBrush(color)
+    # vertical bar — width 3, height 13, centred on x=24, top at y=17
+    bar = QRectF(22.5 * s, 17.0 * s, 3.0 * s, 13.0 * s)
+    painter.drawRoundedRect(bar, 1.5 * s, 1.5 * s)
+    # dot — radius 1.8, centred on (24, 34)
+    painter.drawEllipse(QPointF(24.0 * s, 34.0 * s), 1.8 * s, 1.8 * s)
+
+
+def _draw_question(painter: QPainter, color: QColor, side_px: int) -> None:
+    """The ``?`` symbol drawn as text — Inter at canvas size 22, weight 600."""
+    s = _scaled(side_px)
+    painter.setPen(color)
+    # Prefer Inter (matches the Claude Design canvas), fall back through a
+    # short list of clean macOS sans-serifs so the question mark is always
+    # antialiased and never replaced by a serif default.
+    font = QFont(["Inter", "SF Pro Text", "Helvetica Neue", "Helvetica"])
+    font.setPointSizeF(22.0 * s)
+    font.setWeight(QFont.Weight.DemiBold)
+    font.setStyleHint(QFont.StyleHint.SansSerif, QFont.StyleStrategy.PreferAntialias)
+    painter.setFont(font)
+    # The Claude-Design canvas places the ? baseline at y=32.5; we centre
+    # it inside the circle and let Qt handle the baseline.
+    rect = QRectF(0, 0, side_px, side_px)
+    painter.drawText(rect, int(Qt.AlignmentFlag.AlignCenter), "?")
+
+
+def _draw_check(painter: QPainter, color: QColor, side_px: int) -> None:
+    """The ``✓`` symbol drawn as a stroked path (3.4 pen width, rounded ends).
+
+    ``M14 24.5 L21 31.5 L34 17.5`` from the Claude-Design canvas.
+    """
+    s = _scaled(side_px)
+    pen = QPen(color, 3.4 * s)
+    pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+    pen.setJoinStyle(Qt.PenJoinStyle.RoundJoin)
+    painter.setPen(pen)
+    painter.setBrush(Qt.BrushStyle.NoBrush)
+    path = QPainterPath()
+    path.moveTo(14.0 * s, 24.5 * s)
+    path.lineTo(21.0 * s, 31.5 * s)
+    path.lineTo(34.0 * s, 17.5 * s)
+    painter.drawPath(path)
 
 
 def _render_glyph_pixmap(theme: GlyphTheme, side_px: int) -> QPixmap:
     """Render ``theme`` (shape + symbol) into a fully-antialiased ``QPixmap``.
 
-    The pixmap has full per-pixel alpha — there is no widget-level mask
-    clipping the painted shape, so the antialiased edges bleed cleanly
-    into transparency instead of stair-stepping at a hard region edge.
+    No stroke / border on the shape — the design intent is a single flat
+    fill (matching the Claude-Design canvas), so the only sharp edge is
+    the path's anti-aliased silhouette against the fully-transparent
+    pixmap background.
     """
     pixmap = QPixmap(side_px, side_px)
     pixmap.fill(Qt.GlobalColor.transparent)
@@ -185,33 +228,17 @@ def _render_glyph_pixmap(theme: GlyphTheme, side_px: int) -> QPixmap:
         | QPainter.RenderHint.SmoothPixmapTransform
     )
 
-    inset = max(2.0, side_px * 0.06)
-    rect = QRectF(inset, inset, side_px - 2 * inset, side_px - 2 * inset)
-
-    if theme.shape == "triangle":
-        # An upright triangle's optical centre sits below its geometric
-        # centre — nudge the bounding box a touch so the "!" lands where
-        # the eye expects it.
-        rect.translate(0, side_px * 0.04)
-        path = _rounded_triangle_path(rect, radius=side_px * 0.10)
-    else:
-        path = QPainterPath()
-        path.addEllipse(rect)
-
+    shape_path = _triangle_path(side_px) if theme.shape == "triangle" else _circle_path(side_px)
+    painter.setPen(Qt.PenStyle.NoPen)
     painter.setBrush(theme.fill)
-    painter.setPen(QPen(theme.border, max(1.0, side_px * 0.035)))
-    painter.drawPath(path)
+    painter.drawPath(shape_path)
 
-    painter.setPen(theme.symbol_color)
-    if theme.shape == "triangle":
-        font = QFont("Helvetica", int(side_px * 0.46), QFont.Weight.Black)
-        text_rect = QRectF(rect)
-        text_rect.translate(0, side_px * 0.03)
-    else:
-        font = QFont("Helvetica", int(side_px * 0.5), QFont.Weight.Black)
-        text_rect = QRectF(rect)
-    painter.setFont(font)
-    painter.drawText(text_rect, int(Qt.AlignmentFlag.AlignCenter), theme.symbol)
+    if theme.symbol == "bang":
+        _draw_bang(painter, theme.symbol_color, side_px)
+    elif theme.symbol == "question":
+        _draw_question(painter, theme.symbol_color, side_px)
+    elif theme.symbol == "check":
+        _draw_check(painter, theme.symbol_color, side_px)
 
     painter.end()
     return pixmap
