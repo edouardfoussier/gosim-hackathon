@@ -20,12 +20,18 @@ from fastapi import FastAPI, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from . import bus
 from . import skills as _skills_pkg  # noqa: F401  # ensures registration side-effects
 from .config import config
 from .memory import Wiki
 from .planner import Planner
 from .skills.registry import SKILLS, call as call_skill
 from .voice.stt import transcribe_bytes
+
+# Re-export the broadcast helper so the ``backend.main`` module remains the
+# documented entry point for callers who want to push their own alerts
+# (e.g. the wiki linter publishing a fresh ``scam_alerts.md`` summary).
+broadcast_alert = bus.broadcast_alert
 
 app = FastAPI(title="Xiexie", version="0.1.0")
 app.add_middleware(
@@ -46,6 +52,8 @@ def planner() -> Planner:
     if _planner is None:
         _planner = Planner()
     return _planner
+
+
 
 
 # ── debug / health ────────────────────────────────────────────────────────
@@ -114,6 +122,7 @@ def plan_and_run(req: PlanRunRequest) -> dict[str, Any]:
 @app.websocket("/ws")
 async def ws_endpoint(ws: WebSocket) -> None:
     await ws.accept()
+    bus.register(ws)
     try:
         while True:
             payload_raw = await ws.receive_text()
@@ -155,6 +164,11 @@ async def ws_endpoint(ws: WebSocket) -> None:
                         await ws.send_json(
                             {"type": "skill_result", "name": step.skill, "result": result}
                         )
+                        # Money-shot bridge: when ``analyze_email`` finishes,
+                        # fan out the verdict to every overlay subscriber so
+                        # the warning halo lights up automatically.
+                        if step.skill == "analyze_email":
+                            await bus.broadcast_verdict_if_any()
                     except Exception as exc:  # noqa: BLE001
                         await ws.send_json(
                             {"type": "skill_error", "name": step.skill, "error": str(exc)}
@@ -167,3 +181,5 @@ async def ws_endpoint(ws: WebSocket) -> None:
 
     except WebSocketDisconnect:
         return
+    finally:
+        bus.unregister(ws)

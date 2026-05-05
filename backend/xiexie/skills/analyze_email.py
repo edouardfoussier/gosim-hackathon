@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import json
 import re
+import threading
 from typing import Any
 
 from ..external import email_rep
@@ -42,6 +43,42 @@ EXPECTED_KEYS: tuple[str, ...] = (
     "recommended_actions",
     "speak_aloud",
 )
+
+# ── shared verdict stash for the WS broadcast bridge ─────────────────────
+# ``run`` is sync (skill protocol) but the ``/ws`` endpoint that follows it
+# is async, so the verdict has to cross a thread boundary. A tiny
+# thread-safe stash decouples the two: the skill writes the latest verdict
+# here, and the endpoint pops it before broadcasting an alert. Single-user
+# demo, single skill — a stack-based queue is plenty.
+_LAST_VERDICT_LOCK = threading.Lock()
+_LAST_VERDICTS: list[dict[str, Any]] = []
+_MAX_STASHED_VERDICTS = 8
+
+
+def _stash_verdict(message_id: str | None, verdict: dict[str, Any]) -> None:
+    payload = {
+        "message_id": message_id,
+        "verdict": verdict.get("verdict"),
+        "confidence": verdict.get("confidence"),
+        "signs": list(verdict.get("signs") or []),
+        "speak_aloud": verdict.get("speak_aloud"),
+    }
+    with _LAST_VERDICT_LOCK:
+        _LAST_VERDICTS.append(payload)
+        # Drop the oldest entries if a sloppy caller never pops.
+        while len(_LAST_VERDICTS) > _MAX_STASHED_VERDICTS:
+            _LAST_VERDICTS.pop(0)
+
+
+def pop_last_verdict() -> dict[str, Any] | None:
+    """Pop the most recent stashed verdict (LIFO). Returns ``None`` if empty.
+
+    Called by the ``/ws`` endpoint right after ``analyze_email`` completes
+    so the overlay can light up automatically.
+    """
+    with _LAST_VERDICT_LOCK:
+        return _LAST_VERDICTS.pop() if _LAST_VERDICTS else None
+
 ALLOWED_VERDICTS: tuple[str, ...] = ("safe", "unclear", "suspicious", "phishing")
 ALLOWED_CONFIDENCE: tuple[str, ...] = ("low", "medium", "high")
 DEFAULT_VERDICT: dict[str, Any] = {
@@ -511,6 +548,10 @@ def run(args: dict[str, Any]) -> str:
         return f"I couldn't find an email with id {message_id!r}."
 
     verdict = analyze(message)
+    # Hand the verdict to the WS bridge so the overlay can light up
+    # automatically when the analysis returns. ``pop_last_verdict`` is
+    # consumed inside the ``/ws`` endpoint right after this skill returns.
+    _stash_verdict(message_id, verdict)
 
     lines = [
         f"VERDICT: {verdict.get('verdict', 'unclear')}  (confidence: {verdict.get('confidence', 'low')})"
