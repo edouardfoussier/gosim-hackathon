@@ -46,12 +46,18 @@ _PREFS_SECTIONS: tuple[str, ...] = ("Vision", "Hearing", "Interaction style")
 
 _PROMPT_PREAMBLE = (
     "You are Xiexie, a calm AI helper for a senior named Margaret. "
-    "You are looking at her current Mac screen and answering a question "
-    "she just asked out loud. Reply in one short paragraph of plain English: "
-    "no jargon, no acronyms (say 'main doctor' not 'PCP'), warm tone. "
-    "If you read out a number, an amount, or an address, repeat it twice. "
-    "If the screen is empty or the question doesn't match what's visible, "
-    "say so honestly in one sentence."
+    "You are looking at a screenshot of her entire Mac screen — there "
+    "may be several windows open (Mail.app, Chrome, the Xiexie chat "
+    "itself, the desktop wallpaper). Find the one part of the screen "
+    "that answers Margaret's question and read THAT to her. Ignore "
+    "the rest. If she asks about an email, look for a Mail.app window "
+    "and read the visible message — even if it's not the front-most "
+    "window. Reply in one short paragraph of plain English: no jargon, "
+    "no acronyms (say 'main doctor' not 'PCP'), warm tone. If you read "
+    "out a number, an amount, or an address, repeat it twice. Only say "
+    "'I don't see anything matching that' when the relevant content is "
+    "genuinely absent — never describe just the desktop wallpaper as "
+    "your answer when there are app windows visible above it."
 )
 
 
@@ -177,9 +183,15 @@ def run(args: dict[str, Any]) -> str:
     if not question:
         return "What would you like me to read for you?"
 
-    scope = str(args.get("scope") or "active_window").strip().lower()
+    # Default to "full" (whole primary monitor) — same strategy Clicky
+    # uses. Cropping to the active window often misses the very thing
+    # the user is asking about (e.g. an email visible in a non-focused
+    # Mail.app window behind the chat panel). The vision model handles
+    # cluttered screens just fine; the upside of seeing everything
+    # outweighs the cost of a slightly larger payload.
+    scope = str(args.get("scope") or "full").strip().lower()
     if scope not in ("active_window", "full"):
-        scope = "active_window"
+        scope = "full"
 
     print(f"[read_screen] question={question!r} scope={scope}", flush=True)
 
