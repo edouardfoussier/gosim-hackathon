@@ -4,6 +4,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Mic, MicOff, Sparkles, Volume2 } from "lucide-react";
 import { connect, send, type ServerEvent } from "@/lib/ws";
 import { MicRecorder, TtsPlayer } from "@/lib/audio";
+import { VerdictCard } from "@/components/verdict-card";
+
+type Variant = "phishing" | "suspicious" | "clear";
+type Confidence = "high" | "medium" | "low";
 
 type LogEntry =
   | { kind: "user"; text: string }
@@ -11,9 +15,29 @@ type LogEntry =
   | { kind: "skill"; name: string; result?: string; error?: string }
   | {
       kind: "alert";
-      level: "phishing" | "suspicious" | "clear" | "warning" | "danger";
+      variant: Variant;
+      confidence?: Confidence;
       text: string;
     };
+
+function normalizeVariant(level: string | undefined): Variant {
+  if (level === "phishing" || level === "danger") return "phishing";
+  if (level === "clear") return "clear";
+  return "suspicious";
+}
+
+function deriveConfidence(
+  variant: Variant,
+  message: string
+): Confidence | undefined {
+  const m = message.toLowerCase();
+  if (m.includes("high confidence")) return "high";
+  if (m.includes("medium confidence")) return "medium";
+  if (m.includes("low confidence")) return "low";
+  if (variant === "phishing") return "high";
+  if (variant === "suspicious") return "low";
+  return undefined;
+}
 
 const WS_URL =
   process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8787/ws";
@@ -67,16 +91,19 @@ export default function Home() {
           { kind: "skill", name: e.name, error: e.error },
         ]);
         break;
-      case "alert":
+      case "alert": {
+        const variant = normalizeVariant(e.level);
         setLog((l) => [
           ...l,
           {
             kind: "alert",
-            level: e.level ?? "suspicious",
+            variant,
+            confidence: deriveConfidence(variant, e.message),
             text: e.message,
           },
         ]);
         break;
+      }
       case "done":
         setThinking(false);
         break;
@@ -250,7 +277,7 @@ export default function Home() {
       <section className="w-full max-w-3xl flex-1 flex flex-col gap-3 mb-8 min-h-[40vh]">
         {log.length === 0 && <EmptyState />}
         {log.map((e, i) => (
-          <Bubble key={i} entry={e} />
+          <Bubble key={i} entry={e} submitText={submitText} />
         ))}
       </section>
 
@@ -368,7 +395,12 @@ function EmptyState() {
   );
 }
 
-function Bubble({ entry }: { entry: LogEntry }) {
+type BubbleProps = {
+  entry: LogEntry;
+  submitText: (text: string) => void;
+};
+
+function Bubble({ entry, submitText }: BubbleProps) {
   if (entry.kind === "user") {
     return (
       <div className="self-end max-w-[85%] rounded-2xl rounded-tr-sm bg-ember-500 text-white px-4 py-2 text-base">
@@ -384,25 +416,22 @@ function Bubble({ entry }: { entry: LogEntry }) {
     );
   }
   if (entry.kind === "alert") {
-    const phishing = entry.level === "phishing" || entry.level === "danger";
-    const safe = entry.level === "clear";
-    let cls: string;
-    let label: string;
-    if (phishing) {
-      cls = "border-rose-300 bg-rose-50 text-rose-800";
-      label = "phishing alert";
-    } else if (safe) {
-      cls = "border-emerald-300 bg-emerald-50 text-emerald-800";
-      label = "all clear";
-    } else {
-      cls = "border-amber-300 bg-amber-50 text-amber-900";
-      label = "looks suspicious";
-    }
+    // The Verdict Card is rendered at 80% on screen so the 760px design
+    // sits comfortably inside the 768px max-w-3xl conversation column.
+    const SCALE = 0.8;
     return (
-      <div
-        className={`self-stretch rounded-xl border px-4 py-2 text-sm ${cls}`}
-      >
-        ⚠️ {label}: {entry.text}
+      <div className="self-center my-4">
+        <VerdictCard
+          variant={entry.variant}
+          confidence={entry.confidence}
+          speakAloud={entry.text}
+          scale={SCALE}
+          onTellFamily={() => submitText("Tell Lisa about this")}
+          onArchive={() => submitText("Archive that email")}
+          onShowDetails={() =>
+            submitText("Show me the technical details")
+          }
+        />
       </div>
     );
   }
