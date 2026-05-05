@@ -67,7 +67,16 @@ class LLMProvider:
 
     # ── vision (screenshot reading) ───────────────────────────────────────
     def see(self, image_b64: str, prompt: str) -> str:
-        """Send a screenshot (base64 PNG) + text prompt; return plain text."""
+        """Send a screenshot (base64 PNG) + text prompt; return plain text.
+
+        Raises ``RuntimeError`` if the configured provider has no vision
+        model (e.g. the GOSIM proxy currently exposes text-only models).
+        """
+        if not self.vision_model:
+            raise RuntimeError(
+                "No vision model configured for this provider — set "
+                "ZAI_VISION_MODEL or switch base_url to direct Z.AI."
+            )
         resp = self.client.chat.completions.create(
             model=self.vision_model,
             messages=[
