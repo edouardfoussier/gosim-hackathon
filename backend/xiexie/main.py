@@ -14,9 +14,10 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 from typing import Any
 
-from fastapi import FastAPI, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -27,6 +28,11 @@ from .memory import Wiki
 from .planner import Planner
 from .skills import analyze_email as _analyze_email
 from .skills.registry import SKILLS, call as call_skill
+from .voice.realtime import (
+    RealtimeSession,
+    RealtimeUnavailable,
+    is_available as realtime_available,
+)
 from .voice.stt import transcribe_bytes
 
 # Re-export the broadcast helper so the ``backend.main`` module remains the
@@ -120,6 +126,106 @@ async def transcribe(audio: UploadFile) -> dict[str, str]:
     data = await audio.read()
     text = transcribe_bytes(data)
     return {"text": text}
+
+
+# ── continuous voice (OpenAI Realtime) ────────────────────────────────────
+# The browser opens a WebRTC peer connection straight to OpenAI for
+# low-latency audio. Our role on the server side is to (a) mint the
+# short-lived bearer the browser hands over in its SDP exchange, and
+# (b) be the function-calling tool runner — either via a parallel WS
+# (``run_tool_loop``) or via the relay endpoint below when the browser
+# forwards function call payloads it receives on its data channel.
+_realtime_tool_loops: set[asyncio.Task[None]] = set()
+
+
+@app.get("/voice/capabilities")
+def voice_capabilities() -> dict[str, Any]:
+    """Tell the browser whether continuous mode is wired or click-mic only."""
+    return {
+        "continuous": realtime_available(),
+        "model": os.getenv("OPENAI_REALTIME_MODEL", "gpt-realtime"),
+        "voice": os.getenv("OPENAI_REALTIME_VOICE", "marin"),
+    }
+
+
+@app.post("/voice/session")
+async def voice_session() -> dict[str, Any]:
+    """Mint an ephemeral Realtime session token for the browser.
+
+    Also kicks off ``RealtimeSession.run_tool_loop`` as a background task —
+    this is the "parallel WS" tool runner. See the docstring on
+    :meth:`RealtimeSession.run_tool_loop` for the architectural caveat.
+    """
+    if not realtime_available():
+        raise HTTPException(status_code=503, detail="OPENAI_API_KEY not configured")
+
+    session = RealtimeSession.from_skills(SKILLS)
+    try:
+        token = await session.mint_ephemeral_token()
+    except RealtimeUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001 — surface a useful error to the browser
+        raise HTTPException(status_code=502, detail=f"OpenAI session error: {exc}") from exc
+
+    secret = (token.get("client_secret") or {}).get("value", "")
+
+    # Best-effort: kick off the parallel WS tool runner. Failing here
+    # MUST NOT block the browser flow — the relay endpoint below covers
+    # function calls if the parallel WS turns out to be unsupported.
+    if secret:
+        loop_task = asyncio.create_task(_run_tool_loop_safely(session, secret))
+        _realtime_tool_loops.add(loop_task)
+        loop_task.add_done_callback(_realtime_tool_loops.discard)
+
+    return {
+        "client_secret": secret,
+        "session_id": token.get("id", ""),
+        "expires_at": (token.get("client_secret") or {}).get("expires_at"),
+        "model": session.model,
+        "voice": session.voice,
+    }
+
+
+async def _run_tool_loop_safely(session: RealtimeSession, secret: str) -> None:
+    try:
+        await session.run_tool_loop(secret)
+    except RealtimeUnavailable as exc:
+        # No key / openai package missing — the browser-relay endpoint
+        # picks up the slack so we just log and move on.
+        bus_logger().info("realtime tool loop unavailable: %s", exc)
+    except Exception:  # noqa: BLE001
+        bus_logger().exception("realtime tool loop crashed")
+
+
+def bus_logger():
+    import logging
+
+    return logging.getLogger("xiexie.voice.realtime")
+
+
+class VoiceToolRequest(BaseModel):
+    name: str
+    arguments: dict[str, Any] = {}
+    call_id: str | None = None
+
+
+@app.post("/voice/tool")
+async def voice_tool(req: VoiceToolRequest) -> dict[str, Any]:
+    """Run a single Xiexie skill on behalf of the browser's data channel.
+
+    The browser receives ``response.function_call_arguments.done`` events
+    over the WebRTC data channel, forwards them here, and pipes the
+    result back into the conversation as a ``function_call_output`` item.
+    This is the path that actually works end-to-end today (the parallel
+    WS in ``/voice/session`` is best-effort).
+    """
+    session = RealtimeSession.from_skills(SKILLS)
+    output, ok = await session.dispatch_function_call(req.name, req.arguments)
+
+    if req.name == "analyze_email" and ok:
+        await bus.broadcast_verdict_if_any()
+
+    return {"call_id": req.call_id or "", "ok": ok, "output": output}
 
 
 # ── plan-and-run (synchronous) ────────────────────────────────────────────

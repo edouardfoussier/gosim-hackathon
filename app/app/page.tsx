@@ -1,9 +1,15 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Mic, MicOff, Sparkles, Volume2 } from "lucide-react";
+import { Mic, MicOff, Radio, Sparkles, Volume2 } from "lucide-react";
 import { connect, send, type ServerEvent } from "@/lib/ws";
 import { MicRecorder, TtsPlayer } from "@/lib/audio";
+import {
+  RealtimeClient,
+  fetchVoiceCapabilities,
+  type RealtimeCapabilities,
+  type RealtimeEvent,
+} from "@/lib/realtime";
 import { VerdictCard } from "@/components/verdict-card";
 
 type Variant = "phishing" | "suspicious" | "clear";
@@ -57,11 +63,17 @@ export default function Home() {
   const [draft, setDraft] = useState("");
   const [audioLevel, setAudioLevel] = useState(0);
   const [micError, setMicError] = useState<string | null>(null);
+  const [capabilities, setCapabilities] = useState<RealtimeCapabilities | null>(
+    null
+  );
+  const [continuousActive, setContinuousActive] = useState(false);
+  const [continuousStarting, setContinuousStarting] = useState(false);
 
   const wsRef = useRef<WebSocket | null>(null);
   const recorderRef = useRef<MicRecorder | null>(null);
   const ttsRef = useRef<TtsPlayer | null>(null);
   const levelRafRef = useRef<number | null>(null);
+  const realtimeRef = useRef<RealtimeClient | null>(null);
 
   const onEvent = useCallback((e: ServerEvent) => {
     switch (e.type) {
@@ -120,6 +132,8 @@ export default function Home() {
     wsRef.current = ws;
     ttsRef.current = new TtsPlayer(TTS_VOICE);
 
+    void fetchVoiceCapabilities(BACKEND_URL).then(setCapabilities);
+
     const pollSpeaking = window.setInterval(() => {
       const isSpeaking = ttsRef.current?.isSpeaking() ?? false;
       setSpeaking((prev) => (prev !== isSpeaking ? isSpeaking : prev));
@@ -129,6 +143,8 @@ export default function Home() {
       window.clearInterval(pollSpeaking);
       ttsRef.current?.cancel();
       recorderRef.current?.cleanup();
+      realtimeRef.current?.stop();
+      realtimeRef.current = null;
       if (levelRafRef.current !== null) {
         cancelAnimationFrame(levelRafRef.current);
       }
@@ -142,6 +158,72 @@ export default function Home() {
     send(wsRef.current, { type: "user_text", text: text.trim() });
     setDraft("");
   }, []);
+
+  const handleRealtimeEvent = useCallback((event: RealtimeEvent) => {
+    switch (event.type) {
+      case "user_transcript":
+        setLog((l) => [...l, { kind: "user", text: event.text }]);
+        return;
+      case "assistant_transcript":
+        // Realtime streams partial deltas first then a final ``done`` event.
+        // We only commit the final transcript so we don't double-render
+        // (audio playback already gives Margaret the spoken reply).
+        if (event.partial) return;
+        setLog((l) => [...l, { kind: "xiexie", text: event.text }]);
+        return;
+      case "tool_start":
+        setLog((l) => [...l, { kind: "skill", name: event.name }]);
+        return;
+      case "tool_result":
+        setLog((l) => [
+          ...l,
+          {
+            kind: "skill",
+            name: event.name,
+            ...(event.ok ? { result: event.result } : { error: event.result }),
+          },
+        ]);
+        return;
+      case "model_audio_started":
+        setSpeaking(true);
+        return;
+      case "model_audio_stopped":
+        setSpeaking(false);
+        return;
+      case "error":
+        setMicError(event.message);
+        return;
+    }
+  }, []);
+
+  const stopContinuous = useCallback(() => {
+    realtimeRef.current?.stop();
+    realtimeRef.current = null;
+    setContinuousActive(false);
+    setSpeaking(false);
+  }, []);
+
+  const startContinuous = useCallback(async () => {
+    if (continuousStarting || continuousActive) return;
+    setMicError(null);
+    setContinuousStarting(true);
+    // Cancel any local TTS so the browser SpeechSynthesis voice doesn't
+    // overlap with Marin's voice coming back over WebRTC.
+    ttsRef.current?.cancel();
+    const client = new RealtimeClient();
+    try {
+      await client.start({ backendUrl: BACKEND_URL, onEvent: handleRealtimeEvent });
+      realtimeRef.current = client;
+      setContinuousActive(true);
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "could not open voice channel";
+      setMicError(message);
+      client.stop();
+    } finally {
+      setContinuousStarting(false);
+    }
+  }, [continuousStarting, continuousActive, handleRealtimeEvent]);
 
   const tickLevel = useCallback(() => {
     const recorder = recorderRef.current;
@@ -228,15 +310,34 @@ export default function Home() {
     }
   }, [submitText]);
 
+  const continuousMode = capabilities?.continuous ?? false;
+
   const onMicClick = useCallback(() => {
+    if (continuousMode) {
+      if (continuousActive) {
+        stopContinuous();
+      } else {
+        void startContinuous();
+      }
+      return;
+    }
     if (recording) {
       void stopRecording();
     } else {
       void startRecording();
     }
-  }, [recording, startRecording, stopRecording]);
+  }, [
+    continuousMode,
+    continuousActive,
+    recording,
+    startContinuous,
+    stopContinuous,
+    startRecording,
+    stopRecording,
+  ]);
 
-  const micBusy = transcribing || thinking;
+  const micBusy = continuousStarting || transcribing || thinking;
+  const micActive = continuousMode ? continuousActive : recording;
 
   return (
     <main className="min-h-screen flex flex-col items-center px-6 py-10">
@@ -295,13 +396,40 @@ export default function Home() {
             onClick={onMicClick}
             disabled={micBusy}
             className={`relative w-12 h-12 rounded-full flex items-center justify-center text-white transition disabled:opacity-50 ${
-              recording
+              micActive
                 ? "bg-ember-500 pulse-ring"
                 : "bg-ember-300 hover:bg-ember-400"
             }`}
-            aria-label={recording ? "stop listening" : "start listening"}
+            aria-label={
+              continuousMode
+                ? continuousActive
+                  ? "end continuous conversation"
+                  : "start continuous conversation"
+                : recording
+                ? "stop listening"
+                : "start listening"
+            }
+            title={
+              continuousMode
+                ? continuousActive
+                  ? "End continuous conversation"
+                  : "Start continuous conversation"
+                : recording
+                ? "Stop recording"
+                : "Click to record"
+            }
           >
-            {recording ? <MicOff size={22} /> : <Mic size={22} />}
+            {continuousMode ? (
+              micActive ? (
+                <MicOff size={22} />
+              ) : (
+                <Radio size={22} />
+              )
+            ) : micActive ? (
+              <MicOff size={22} />
+            ) : (
+              <Mic size={22} />
+            )}
           </button>
           <input
             value={draft}
@@ -321,6 +449,19 @@ export default function Home() {
         <p className="mt-2 text-xs text-zinc-500 text-center min-h-[1rem]">
           {micError ? (
             <span className="text-rose-600">⚠ {micError}</span>
+          ) : continuousStarting ? (
+            "opening voice channel…"
+          ) : continuousMode && continuousActive ? (
+            <>
+              continuous conversation — speak any time, click the mic to end
+            </>
+          ) : continuousMode ? (
+            <>
+              Continuous voice via <code>gpt-realtime</code>{capabilities?.voice
+                ? ` (${capabilities.voice})`
+                : ""}
+              {" "}— click the mic to start.
+            </>
           ) : transcribing ? (
             "transcribing…"
           ) : recording ? (
@@ -329,8 +470,8 @@ export default function Home() {
             "thinking…"
           ) : (
             <>
-              Hot-mic STT runs through <code>/transcribe</code>; replies are
-              spoken locally via the browser.
+              Click-to-record STT through <code>/transcribe</code>. Set{" "}
+              <code>OPENAI_API_KEY</code> for continuous voice.
             </>
           )}
         </p>
