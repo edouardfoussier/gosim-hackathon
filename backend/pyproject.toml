@@ -21,6 +21,9 @@ dependencies = [
     "faster-whisper>=1.0",
     "soundfile>=0.12",
     "numpy>=1.26",
+    # voice triggers — wake-word ("Xiexie") + push-to-talk fallback
+    "pvporcupine>=3.0",
+    "sounddevice>=0.5",
     # memory / wiki
     "python-frontmatter>=1.1",
     "pyyaml>=6",
