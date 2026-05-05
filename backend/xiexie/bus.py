@@ -37,11 +37,18 @@ _active_clients: set[Any] = set()
 # Verdict labels that warrant a UI alert. The spec uses "clear" as a
 # synonym for our schema's "safe" — accept both.
 ALERT_VERDICTS: tuple[str, ...] = ("phishing", "suspicious", "safe", "clear")
+# Map every accepted verdict to the *overlay's* native vocabulary
+# (``phishing`` / ``suspicious`` / ``clear``) so a single ``level`` value
+# in the broadcast frame drives all three consumer surfaces:
+#   - native PyQt6 overlay glyph (THEMES keyed by these labels)
+#   - Next.js verdict banner
+#   - any future Chrome extension consumer
+# ``safe`` is normalised to ``clear`` for backward compat with the schema.
 _VERDICT_LEVELS: dict[str, str] = {
-    "phishing": "danger",
-    "suspicious": "warning",
-    "safe": "info",
-    "clear": "info",
+    "phishing": "phishing",
+    "suspicious": "suspicious",
+    "safe": "clear",
+    "clear": "clear",
 }
 
 

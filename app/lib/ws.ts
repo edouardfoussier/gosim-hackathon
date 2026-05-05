@@ -7,7 +7,14 @@ export type ServerEvent =
   | { type: "skill_start"; name: string; args: Record<string, unknown> }
   | { type: "skill_result"; name: string; result: string }
   | { type: "skill_error"; name: string; error: string }
-  | { type: "alert"; level?: "warning" | "danger"; message: string }
+  | {
+      type: "alert";
+      // Backend emits the overlay-native vocabulary (phishing | suspicious
+      // | clear). "warning" / "danger" are kept as legacy synonyms so a
+      // mid-flight upgrade doesn't break any deployed Chrome extension.
+      level?: "phishing" | "suspicious" | "clear" | "warning" | "danger";
+      message: string;
+    }
   | { type: "done" }
   | { type: "pong" }
   | { type: "error"; message: string };

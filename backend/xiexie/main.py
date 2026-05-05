@@ -104,13 +104,17 @@ class PlanRunRequest(BaseModel):
 
 
 @app.post("/plan-and-run")
-def plan_and_run(req: PlanRunRequest) -> dict[str, Any]:
-    plan = planner().plan(req.text, history=req.history)
+async def plan_and_run(req: PlanRunRequest) -> dict[str, Any]:
+    plan = await asyncio.to_thread(planner().plan, req.text, req.history)
     results: list[dict[str, Any]] = []
     for step in plan.steps:
         try:
-            output = call_skill(step.skill, step.arguments)
+            output = await asyncio.to_thread(call_skill, step.skill, step.arguments)
             results.append({"skill": step.skill, "args": step.arguments, "result": output})
+            # Money-shot bridge: when ``analyze_email`` finishes, fan out
+            # the verdict to every overlay subscriber on /ws.
+            if step.skill == "analyze_email":
+                await bus.broadcast_verdict_if_any()
         except Exception as exc:  # noqa: BLE001
             results.append(
                 {"skill": step.skill, "args": step.arguments, "error": str(exc)}

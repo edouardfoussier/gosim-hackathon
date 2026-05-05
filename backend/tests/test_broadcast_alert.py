@@ -95,11 +95,14 @@ def test_broadcast_verdict_levels() -> None:
     client = FakeClient()
     bus.register(client)
 
+    # Bus normalises every accepted verdict to the overlay's native vocab
+    # (phishing | suspicious | clear) so a single ``level`` value drives
+    # the PyQt6 glyph, the Next.js banner, and any future Chrome ext.
     cases = [
-        ("phishing", "danger"),
-        ("suspicious", "warning"),
-        ("safe", "info"),
-        ("clear", "info"),
+        ("phishing", "phishing"),
+        ("suspicious", "suspicious"),
+        ("safe", "clear"),
+        ("clear", "clear"),
     ]
     for verdict_label, expected_level in cases:
         client.sent.clear()

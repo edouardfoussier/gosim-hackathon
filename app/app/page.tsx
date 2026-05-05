@@ -9,7 +9,11 @@ type LogEntry =
   | { kind: "user"; text: string }
   | { kind: "xiexie"; text: string }
   | { kind: "skill"; name: string; result?: string; error?: string }
-  | { kind: "alert"; level: "warning" | "danger"; text: string };
+  | {
+      kind: "alert";
+      level: "phishing" | "suspicious" | "clear" | "warning" | "danger";
+      text: string;
+    };
 
 const WS_URL =
   process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8787/ws";
@@ -68,7 +72,7 @@ export default function Home() {
           ...l,
           {
             kind: "alert",
-            level: e.level ?? "warning",
+            level: e.level ?? "suspicious",
             text: e.message,
           },
         ]);
@@ -380,16 +384,25 @@ function Bubble({ entry }: { entry: LogEntry }) {
     );
   }
   if (entry.kind === "alert") {
-    const danger = entry.level === "danger";
+    const phishing = entry.level === "phishing" || entry.level === "danger";
+    const safe = entry.level === "clear";
+    let cls: string;
+    let label: string;
+    if (phishing) {
+      cls = "border-rose-300 bg-rose-50 text-rose-800";
+      label = "phishing alert";
+    } else if (safe) {
+      cls = "border-emerald-300 bg-emerald-50 text-emerald-800";
+      label = "all clear";
+    } else {
+      cls = "border-amber-300 bg-amber-50 text-amber-900";
+      label = "looks suspicious";
+    }
     return (
       <div
-        className={`self-stretch rounded-xl border px-4 py-2 text-sm ${
-          danger
-            ? "border-rose-300 bg-rose-50 text-rose-800"
-            : "border-amber-300 bg-amber-50 text-amber-900"
-        }`}
+        className={`self-stretch rounded-xl border px-4 py-2 text-sm ${cls}`}
       >
-        ⚠️ {danger ? "phishing alert" : "alert"}: {entry.text}
+        ⚠️ {label}: {entry.text}
       </div>
     );
   }
