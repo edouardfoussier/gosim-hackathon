@@ -2,11 +2,17 @@
 
 PyQt6 gives us a transparent always-on-top QWidget, which is enough for a
 single Space. To survive Spaces switching (and to stay visible above
-fullscreen apps without stealing focus), we reach into the underlying
-``NSWindow`` and toggle three things:
+fullscreen apps — including Mail.app modal sheets, which is the whole
+point of Scam Shield), we reach into the underlying ``NSWindow`` and
+toggle three things:
 
-1. ``setLevel_(NSStatusWindowLevel)`` — sit above almost everything,
-   including most app menu bars.
+1. ``setLevel_(NSScreenSaverWindowLevel)`` — sit above *everything* in
+   normal app windowing, including modal sheets, popovers, and tear-off
+   panels. We deliberately step above ``NSStatusWindowLevel`` (25) since
+   a finding from the Clicky deep-read showed that Mail.app phishing
+   warning sheets render at a level that hides a status-level glyph.
+   Screen-saver level (1000) is the conventional "really above
+   everything else from the app world" tier.
 2. ``setCollectionBehavior_`` with the ``CanJoinAllSpaces |
    StationaryFanInOut | FullScreenAuxiliary`` mask — join every Space and
    coexist with fullscreen apps.
@@ -30,7 +36,12 @@ _NS_WINDOW_COLLECTION_BEHAVIOR_CAN_JOIN_ALL_SPACES = 1 << 0
 _NS_WINDOW_COLLECTION_BEHAVIOR_STATIONARY = 1 << 4
 _NS_WINDOW_COLLECTION_BEHAVIOR_FULLSCREEN_AUXILIARY = 1 << 8
 _NS_WINDOW_COLLECTION_BEHAVIOR_IGNORES_CYCLE = 1 << 6
-_NS_STATUS_WINDOW_LEVEL = 25  # above floating (3) and modal panels (8)
+
+# NSScreenSaverWindowLevel == 1000 — sits above NSStatusWindowLevel (25),
+# NSModalPanelWindowLevel (8), and NSFloatingWindowLevel (3). We import
+# the symbol from AppKit when PyObjC is available so a future Cocoa
+# revision can adjust the underlying integer for us.
+_NS_SCREEN_SAVER_WINDOW_LEVEL = 1000
 
 
 def promote_to_panel(qt_widget, *, ignore_mouse: bool = False) -> bool:
@@ -46,6 +57,13 @@ def promote_to_panel(qt_widget, *, ignore_mouse: bool = False) -> bool:
     except Exception:  # pragma: no cover — pyobjc missing
         print("[overlay.ns_panel] PyObjC not available — Spaces tweak skipped.")
         return False
+
+    try:
+        from AppKit import NSScreenSaverWindowLevel  # type: ignore[import-not-found]
+
+        screen_saver_level = int(NSScreenSaverWindowLevel)
+    except Exception:
+        screen_saver_level = _NS_SCREEN_SAVER_WINDOW_LEVEL
 
     # The Qt widget must already be ``show()``-n for an NSWindow to exist.
     win_id = int(qt_widget.winId())
@@ -64,7 +82,7 @@ def promote_to_panel(qt_widget, *, ignore_mouse: bool = False) -> bool:
     if target is None:
         return False
 
-    target.setLevel_(_NS_STATUS_WINDOW_LEVEL)
+    target.setLevel_(screen_saver_level)
     target.setCollectionBehavior_(
         _NS_WINDOW_COLLECTION_BEHAVIOR_CAN_JOIN_ALL_SPACES
         | _NS_WINDOW_COLLECTION_BEHAVIOR_STATIONARY
