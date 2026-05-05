@@ -82,16 +82,23 @@ class LLMProvider:
         temperature: float = 0.2,
         max_tokens: int = 1024,
         json_mode: bool = False,
+        tool_choice: str | dict[str, Any] = "auto",
+        model: str | None = None,
     ) -> LLMResponse:
+        # ``model`` lets a caller override the provider's default *for this
+        # one call only*. We use it in the planner to route tool dispatch
+        # to deepseek-v4-pro (GLM-5.1 on the GOSIM proxy ignores
+        # ``tool_choice`` in many cases) while keeping the prestige reasoner
+        # GLM-5.1 for analyze_email and the verdict JSON.
         kwargs: dict[str, Any] = dict(
-            model=self.model,
+            model=model or self.model,
             messages=messages,
             temperature=temperature,
             max_tokens=max_tokens,
         )
         if tools:
             kwargs["tools"] = tools
-            kwargs["tool_choice"] = "auto"
+            kwargs["tool_choice"] = tool_choice
 
         if json_mode:
             # Honoured by GLM-5.x via the OpenAI-compatible field, OpenAI

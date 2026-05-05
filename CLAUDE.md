@@ -393,6 +393,48 @@ The strip post-process is kept as belt-and-braces (it only scrubs
 ``<thinking>…</thinking>`` blocks and a literal ``thinking:`` prefix —
 no longer attempts paragraph recovery, which was over-truncating).
 
+### 2026-05-05 (late afternoon) — Hybrid LLM split: GLM verdict + DeepSeek dispatch
+After landing the Thinking-Mode fix, end-to-end planner testing surfaced
+a separate proxy-side bug:
+
+**GLM-5.1 on the GOSIM proxy refuses to emit `tool_calls` for several
+of our skills, even with `tool_choice="required"` or a force-named tool.**
+Instead the model returns plain narration like *"The user wants me to
+analyze msg-003. I should call analyze_email."* with `tool_calls=None`.
+Tested with the full skill list, with one tool only, and with
+`tool_choice={"type":"function","function":{"name":"read_emails"}}` —
+same outcome. Some skills (`open_app`, `set_reminder`) dispatch fine; the
+flagship ones (`read_emails`, `analyze_email`) never do. Likely a proxy
+bug we cannot reach.
+
+**DeepSeek-V4-Pro on the same proxy dispatches every skill cleanly**,
+including `analyze_email`. Tested 6/6 cases green.
+
+**Final split**:
+- ``ZAI_MODEL=glm-5.1`` stays the global default — used by the
+  prestige-slot reasoner (verdict JSON inside ``analyze_email``,
+  multi-tool composition, the sponsor showcase).
+- The **planner** routes its tool-dispatch call through
+  ``deepseek-v4-pro`` via ``Planner(dispatch_model=…)`` /
+  ``XIEXIE_PLANNER_MODEL`` env. Override is encapsulated entirely inside
+  ``backend/xiexie/planner/planner.py``.
+- A new ``narrate`` sentinel tool gives the model a clean escape hatch
+  for prompts that don't match any real skill — instead of inventing a
+  call, the model emits ``narrate(reply="…")`` and the runtime treats
+  it as no-op narration.
+
+Pitch alignment: *"Xiexie's brain is GLM-5.1 — it's the model doing the
+multi-tool forensic reasoning that produces the verdict. The planner's
+dispatcher is DeepSeek-V4-Pro on the same Z.AI-provided proxy — both
+are Chinese open-source models featured at GOSIM, and the architecture
+is provider-agnostic so swapping either one is a single env-var
+change."*
+
+If a direct Z.AI key (`api.z.ai/api/paas/v4`) becomes available, the
+dispatch bug likely disappears (it's proxy-specific) and we collapse
+back to all-GLM with one ``XIEXIE_PLANNER_MODEL=glm-5.1`` line in
+``.env``.
+
 ### 2026-05-05 (early afternoon) — Wire 3 free-tier external APIs
 Audit of the 2026 landscape (FTC API, urlscan.io, PhishTank/OpenPhish,
 URLhaus, Google Safe Browsing, VirusTotal, EmailRep) chose the three with
