@@ -19,36 +19,55 @@ from openai import OpenAI
 
 from ..config import config
 
-# GLM-5.x exposes a "Thinking Mode" by default which prepends a chain-of-
-# thought block (``thinking:\n…``) to the actual answer. We disable it via
-# the ``extra_body`` channel of the OpenAI SDK (the proxy forwards the
-# field straight to GLM) AND strip any leaking prefix as a belt-and-braces
-# defense — different provider versions accept different field names.
+# GLM-5.x defaults to a "Thinking Mode" that bleeds chain-of-thought into
+# ``message.content``. The proxy doesn't forward our extra_body fields
+# reliably, so we layer three defenses:
+#   (1) extra_body hint (no-op when ignored)
+#   (2) a system-message directive prepended to *every* call
+#   (3) post-process strip that recovers a quoted final answer when the
+#       model dumps a long self-analysis instead of an answer.
 _GLM_NO_THINKING_EXTRA = {
     "thinking": {"type": "disabled"},
     "enable_thinking": False,
+    "thinking_mode": False,
+    "do_sample": True,
 }
 
-_THINKING_PREFIX_RE = re.compile(
-    r"^\s*(?:<thinking>.*?</thinking>\s*|thinking[:：][\s\S]*?\n\n)",
+_NO_COT_DIRECTIVE = (
+    "OUTPUT FORMAT (non-negotiable): respond with the final answer ONLY. "
+    "Do not narrate your reasoning, do not enumerate steps, do not write "
+    "'Let me think' or 'First I will…'. No bullet lists of self-analysis. "
+    "Skip preambles. If the user asks a question, answer in at most 2 short "
+    "sentences unless they explicitly request more. If they ask for "
+    "structured output (JSON, table, code), produce ONLY that structure."
+)
+
+_THINKING_TAG_RE = re.compile(
+    r"<thinking>.*?</thinking>\s*",
+    re.IGNORECASE | re.DOTALL,
+)
+_THINKING_PREFIX_LITERAL_RE = re.compile(
+    r"^\s*thinking[:：]\s*",
     re.IGNORECASE,
 )
 
 
-def _strip_thinking_prefix(text: str) -> str:
-    """Best-effort scrub of leaking CoT prefixes from GLM responses."""
+def _strip_thinking_prefix(text: str, *, json_mode: bool = False) -> str:
+    """Conservatively scrub leaking CoT from GLM responses.
+
+    Two safe operations only:
+      1. Remove any ``<thinking>…</thinking>`` block (XML-style markers).
+      2. Strip a literal ``thinking:`` prefix at the start.
+
+    No paragraph splitting, no quote recovery, no truncation. If the model
+    dumps CoT the caller sees it (and the system directive plus optional
+    ``json_mode`` are the levers that force a clean answer upstream).
+    """
     if not text:
         return text
-    # Cheap: drop a recognised prefix block.
-    text = _THINKING_PREFIX_RE.sub("", text, count=1)
-    # If the prefix wasn't recognised but the model dumped a long bullet
-    # list of self-analysis without a final paragraph, return the last
-    # paragraph (heuristic: most models put the final reply after the last
-    # blank line).
-    if text.lower().startswith(("thinking", "1.", "let me", "let's analyze")):
-        last_block = text.rstrip().split("\n\n")[-1].strip()
-        if last_block and last_block != text.strip():
-            text = last_block
+    text = _THINKING_TAG_RE.sub("", text)
+    if not json_mode:
+        text = _THINKING_PREFIX_LITERAL_RE.sub("", text, count=1)
     return text.strip()
 
 
@@ -77,6 +96,21 @@ class LLMProvider:
         max_tokens: int = 1024,
         json_mode: bool = False,
     ) -> LLMResponse:
+        # On GLM, prepend an explicit "no chain-of-thought" directive into
+        # the system message (or create one if absent). This is the
+        # strongest signal we have to suppress Thinking Mode and survives
+        # even when ``extra_body`` fields are stripped by the GOSIM proxy.
+        if self.name == "zai":
+            messages = list(messages)  # don't mutate the caller's list
+            if messages and messages[0].get("role") == "system":
+                head = messages[0]
+                messages[0] = {
+                    **head,
+                    "content": _NO_COT_DIRECTIVE + "\n\n" + (head.get("content") or ""),
+                }
+            else:
+                messages.insert(0, {"role": "system", "content": _NO_COT_DIRECTIVE})
+
         kwargs: dict[str, Any] = dict(
             model=self.model,
             messages=messages,
@@ -118,7 +152,7 @@ class LLMProvider:
                 }
             )
 
-        text = _strip_thinking_prefix(msg.content or "")
+        text = _strip_thinking_prefix(msg.content or "", json_mode=json_mode)
         return LLMResponse(text=text, tool_calls=tool_calls, raw=resp)
 
     # ── vision (screenshot reading) ───────────────────────────────────────
