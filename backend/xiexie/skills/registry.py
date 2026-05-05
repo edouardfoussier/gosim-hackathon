@@ -45,8 +45,11 @@ SKILLS: dict[str, Skill] = {}
 
 
 def register(skill: Skill) -> Skill:
-    if skill.name in SKILLS:
-        raise ValueError(f"Skill {skill.name!r} already registered")
+    # Idempotent on purpose: ``python -m xiexie.skills.<name>`` triggers
+    # both the package-level ``__init__`` import *and* the module re-execution
+    # by ``runpy``, which would otherwise raise on the second registration
+    # of the same skill. Last-write-wins keeps single-skill smoke tests
+    # working without polluting the public surface.
     SKILLS[skill.name] = skill
     return skill
 

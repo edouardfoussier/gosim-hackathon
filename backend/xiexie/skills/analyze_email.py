@@ -66,6 +66,33 @@ Hard rules:
   default to 'safe' unless the body or links contradict that.
 - Acronyms are forbidden in `speak_aloud`. Say 'Social Security Number' once
   and then 'that number'.
+
+What you are NOT looking for (false-positive guard — explicitly tolerate
+these patterns; they are not scams on their own):
+- Legitimate marketing or newsletter blasts (unsubscribe footer, friendly
+  tone, no request for credentials or money). Verdict: 'safe'.
+- Emails from a sender whose domain matches an entry in wiki/accounts.md
+  exactly, with neutral or transactional language and no sense of urgency.
+  Verdict: 'safe'.
+- Account notifications (e.g. password change, login from new device,
+  shipping update) sent from a domain that exactly matches a wiki/accounts.md
+  entry — even when they mention "verify" or "click", as long as the link
+  goes back to the same known domain. Verdict: 'safe'.
+- Transactional emails — receipts, order confirmations, shipping updates,
+  appointment reminders — from a known vendor, with no urgency and no
+  request for sensitive information beyond what the user already shared.
+  Verdict: 'safe'.
+- Personal emails from known family contacts in wiki/family.md (sender
+  address or display name matches), even when warm/emotional language could
+  superficially look manipulative. Verdict: 'safe'.
+- Routine corporate updates (open-enrollment reminders, policy renewals)
+  from a sender domain that exactly matches accounts.md, with the link
+  pointing back to that same domain. Verdict: 'safe'.
+- Two-factor codes / one-time passcodes from a known service. Verdict: 'safe'.
+
+When in doubt between 'safe' and 'unclear', prefer 'unclear' with a sentence
+explaining the single ambiguity — never invent risks that aren't in the
+evidence above.
 """
 
 
