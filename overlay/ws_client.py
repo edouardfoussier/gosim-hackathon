@@ -10,6 +10,10 @@ react from the main thread:
 - :pyattr:`speaking` — payload ``(state: str, level: float | None, raw: dict)``,
   triggered by ``{"type": "speaking", "state": "start"|"stop", "level": 0..1 | null}``.
   Drives :class:`overlay.soundwave.SoundwaveOverlay`.
+- :pyattr:`working` — payload ``(state: str, label: str | None, raw: dict)``,
+  triggered by ``{"type": "working", "state": "start"|"stop", "label": "..."}``.
+  Lights up the soundwave in a calmer "thinking" mode while a skill
+  runs silently (vision call, scam analysis, AppleScript automation).
 
 Other message types from the backend (``transcript``, ``speak``,
 ``skill_*``, ``done``, ``confirm``) are silently ignored — this bridge
@@ -57,6 +61,7 @@ class WsBridge(QObject):
     # generic ``object`` slot so the receiver can branch on
     # ``isinstance(level, float)`` cleanly.
     speaking = pyqtSignal(str, object, dict)
+    working = pyqtSignal(str, object, dict)
     connected = pyqtSignal(bool)
 
     def __init__(self, url: str = DEFAULT_URL, parent: QObject | None = None) -> None:
@@ -145,4 +150,13 @@ class WsBridge(QObject):
                     else:
                         level = max(0.0, min(1.0, level))
             self.speaking.emit(state, level, payload)
+            return
+
+        if kind == "working":
+            state = str(payload.get("state", "")).strip().lower()
+            if state not in {"start", "stop"}:
+                return
+            raw_label = payload.get("label")
+            label = str(raw_label) if isinstance(raw_label, str) else None
+            self.working.emit(state, label, payload)
             return

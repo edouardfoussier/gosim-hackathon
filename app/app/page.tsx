@@ -17,6 +17,7 @@ import {
   type PassiveWakeListenerHandle,
 } from "@/lib/wake-listener";
 import { VerdictCard } from "@/components/verdict-card";
+import { CursorHalo } from "@/components/cursor-halo";
 
 type Variant = "phishing" | "suspicious" | "clear";
 type Confidence = "high" | "medium" | "low";
@@ -76,6 +77,16 @@ export default function Home() {
   const [continuousStarting, setContinuousStarting] = useState(false);
   const [wakeArmed, setWakeArmed] = useState(false);
   const [wakeSupported, setWakeSupported] = useState(false);
+  // Cursor-halo signals fanned out from the backend WS:
+  //   speakingFromWs.level — Marin's RMS (also fed straight from the
+  //     local realtime client; we listen to the WS too so any future
+  //     surface that doesn't own the analyser can still react).
+  //   workingActive — silent agent activity (read_screen, analyze_email,
+  //     planner think). Drives the pulsing dot + label hint.
+  const [haloLevel, setHaloLevel] = useState<number | null>(null);
+  const [workingActive, setWorkingActive] = useState(false);
+  const [workingLabel, setWorkingLabel] = useState<string | null>(null);
+  const workingResetTimerRef = useRef<number | null>(null);
 
   const wsRef = useRef<WebSocket | null>(null);
   const recorderRef = useRef<MicRecorder | null>(null);
@@ -125,6 +136,35 @@ export default function Home() {
         ]);
         break;
       }
+      case "speaking":
+        if (e.state === "start") {
+          if (typeof e.level === "number") setHaloLevel(e.level);
+        } else {
+          setHaloLevel(null);
+        }
+        break;
+      case "working":
+        if (e.state === "start") {
+          if (workingResetTimerRef.current !== null) {
+            window.clearTimeout(workingResetTimerRef.current);
+            workingResetTimerRef.current = null;
+          }
+          setWorkingActive(true);
+          setWorkingLabel(e.label ?? null);
+        } else {
+          // Tiny linger so a fast skill (e.g. open_app) still flashes the
+          // halo for ~300 ms — otherwise the dot pops in and out and
+          // looks like a glitch.
+          if (workingResetTimerRef.current !== null) {
+            window.clearTimeout(workingResetTimerRef.current);
+          }
+          workingResetTimerRef.current = window.setTimeout(() => {
+            setWorkingActive(false);
+            setWorkingLabel(null);
+            workingResetTimerRef.current = null;
+          }, 280);
+        }
+        break;
       case "done":
         setThinking(false);
         break;
@@ -158,6 +198,10 @@ export default function Home() {
       wakeRef.current = null;
       if (levelRafRef.current !== null) {
         cancelAnimationFrame(levelRafRef.current);
+      }
+      if (workingResetTimerRef.current !== null) {
+        window.clearTimeout(workingResetTimerRef.current);
+        workingResetTimerRef.current = null;
       }
       ws.close();
     };
@@ -428,6 +472,17 @@ export default function Home() {
 
   return (
     <main className="min-h-screen flex flex-col items-center px-6 py-10">
+      {/* Cursor-following halo: speaks when Marin produces audio, pulses
+          when the agent is silently working (vision call, scam analysis,
+          etc.). Mirrors the native PyQt6 SoundwaveOverlay in the .app
+          build. */}
+      <CursorHalo
+        speaking={speaking}
+        level={haloLevel}
+        working={workingActive}
+        label={workingLabel}
+      />
+
       {/* Header */}
       <header className="w-full max-w-3xl flex items-center justify-between mb-8">
         <div className="flex items-center gap-3">

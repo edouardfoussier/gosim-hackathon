@@ -40,6 +40,36 @@ from .voice.stt import transcribe_bytes
 # (e.g. the wiki linter publishing a fresh ``scam_alerts.md`` summary).
 broadcast_alert = bus.broadcast_alert
 
+
+# ── working-state labels ──────────────────────────────────────────────────
+# Surfaced to the cursor halo and the chat status pill so Margaret sees a
+# warm hint of what's happening even when Xiexie is silent. Keep them
+# short (≤ 32 chars) and present-tense.
+_SKILL_WORKING_LABELS: dict[str, str] = {
+    "read_screen":   "looking at your screen",
+    "read_emails":   "checking your inbox",
+    "analyze_email": "studying that email",
+    "find_file":     "searching your files",
+    "open_app":      "opening the app",
+    "set_reminder":  "setting your reminder",
+    "zoom_text":     "adjusting the text size",
+    "play_music":    "queueing the music",
+    "check_wifi":    "checking your wifi",
+    "check_battery": "checking the battery",
+    "set_volume":    "adjusting the volume",
+    "daily_brief":   "putting together your brief",
+    "report_to_family": "drafting the family note",
+    "narrate":       None,
+}
+
+
+def _label_for(skill_name: str) -> str:
+    """Friendly hint for a skill, fallback to a generic phrasing."""
+    label = _SKILL_WORKING_LABELS.get(skill_name)
+    if label is not None:
+        return label
+    return f"working on {skill_name.replace('_', ' ')}"
+
 app = FastAPI(title="Xiexie", version="0.1.0")
 app.add_middleware(
     CORSMiddleware,
@@ -260,7 +290,12 @@ async def voice_tool(req: VoiceToolRequest) -> dict[str, Any]:
     WS in ``/voice/session`` is best-effort).
     """
     session = RealtimeSession.from_skills(SKILLS)
-    output, ok = await session.dispatch_function_call(req.name, req.arguments)
+    label = _label_for(req.name)
+    await bus.broadcast_working("start", label)
+    try:
+        output, ok = await session.dispatch_function_call(req.name, req.arguments)
+    finally:
+        await bus.broadcast_working("stop")
 
     if req.name == "analyze_email" and ok:
         await bus.broadcast_verdict_if_any()
@@ -276,10 +311,19 @@ class PlanRunRequest(BaseModel):
 
 @app.post("/plan-and-run")
 async def plan_and_run(req: PlanRunRequest) -> dict[str, Any]:
-    plan = await asyncio.to_thread(planner().plan, req.text, req.history)
+    # Light-up the cursor halo while the planner thinks — first GLM-4.6
+    # round-trip can be 1-2 s and Margaret should see the agent is busy.
+    await bus.broadcast_working("start", "thinking")
+    try:
+        plan = await asyncio.to_thread(planner().plan, req.text, req.history)
+    finally:
+        await bus.broadcast_working("stop")
+
     results: list[dict[str, Any]] = []
     followup_prompt: str | None = None
     for step in plan.steps:
+        label = _label_for(step.skill)
+        await bus.broadcast_working("start", label)
         try:
             output = await asyncio.to_thread(call_skill, step.skill, step.arguments)
             results.append({"skill": step.skill, "args": step.arguments, "result": output})
@@ -297,6 +341,8 @@ async def plan_and_run(req: PlanRunRequest) -> dict[str, Any]:
             results.append(
                 {"skill": step.skill, "args": step.arguments, "error": str(exc)}
             )
+        finally:
+            await bus.broadcast_working("stop")
     payload: dict[str, Any] = {
         "speak": plan.speak,
         "steps": results,
@@ -335,8 +381,12 @@ async def ws_endpoint(ws: WebSocket) -> None:
 
                 await ws.send_json({"type": "transcript", "text": text})
 
-                # plan
-                plan = await asyncio.to_thread(planner().plan, text, history)
+                # plan (cursor halo: thinking)
+                await bus.broadcast_working("start", "thinking")
+                try:
+                    plan = await asyncio.to_thread(planner().plan, text, history)
+                finally:
+                    await bus.broadcast_working("stop")
                 await ws.send_json({"type": "speak", "text": plan.speak})
 
                 # execute steps in order, streaming results
@@ -346,6 +396,8 @@ async def ws_endpoint(ws: WebSocket) -> None:
                     await ws.send_json(
                         {"type": "skill_start", "name": step.skill, "args": step.arguments}
                     )
+                    label = _label_for(step.skill)
+                    await bus.broadcast_working("start", label)
                     try:
                         result = await asyncio.to_thread(
                             call_skill, step.skill, step.arguments
@@ -382,6 +434,8 @@ async def ws_endpoint(ws: WebSocket) -> None:
                         await ws.send_json(
                             {"type": "skill_error", "name": step.skill, "error": str(exc)}
                         )
+                    finally:
+                        await bus.broadcast_working("stop")
 
                 await ws.send_json({"type": "done"})
                 continue

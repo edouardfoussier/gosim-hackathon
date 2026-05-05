@@ -123,8 +123,34 @@ def main(argv: Sequence[str] | None = None) -> int:
     def _on_connection(ok: bool) -> None:
         print(f"[overlay] backend WS {'connected' if ok else 'disconnected'}")
 
+    # ``working`` events keep the soundwave alive while a skill runs
+    # silently (vision call, scam analysis, …). We piggy-back on the
+    # existing soundwave in procedural mode so Margaret sees Xiexie
+    # *thinking*, not frozen. A small ref-count guards against an
+    # incoming ``speaking start`` overriding our "stop" while the
+    # surface is still wanted by an in-flight skill.
+    working_active = {"count": 0}
+
+    def _on_working(state: str, label: object, _raw: dict) -> None:
+        if state == "start":
+            working_active["count"] += 1
+            if not soundwave.is_active():
+                hint = label if isinstance(label, str) else "thinking"
+                print(f"[overlay] working start ({hint!r})")
+                soundwave.start()
+        elif state == "stop":
+            working_active["count"] = max(0, working_active["count"] - 1)
+            if working_active["count"] == 0:
+                # Only release the wave if no other working/speaking
+                # signal is currently driving it. The browser realtime
+                # client emits its own ``speaking stop`` when the audio
+                # actually fades, so the wave never gets stranded.
+                print("[overlay] working stop")
+                soundwave.stop()
+
     bridge.alert.connect(_on_alert)
     bridge.speaking.connect(_on_speaking)
+    bridge.working.connect(_on_working)
     bridge.connected.connect(_on_connection)
     bridge.start()
     print(f"[overlay] listening on {args.url} (Ctrl-C to quit)")

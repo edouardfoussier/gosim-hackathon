@@ -90,6 +90,26 @@ async def broadcast_alert(level: str, message: str) -> None:
     await _fanout({"type": "alert", "level": level, "message": message})
 
 
+async def broadcast_working(state: str, label: str | None = None) -> None:
+    """Fan out a ``working`` frame so subscribers can show a thinking
+    indicator while the agent is silently busy (vision call, scam
+    analysis, AppleScript automation, …).
+
+    ``state`` is ``"start"`` or ``"stop"``. ``label`` is an optional
+    human-readable hint (e.g. ``"reading your screen"``,
+    ``"analysing the email"``) that the cursor halo can flash next to
+    the bars and the status pill in the chat header can render.
+
+    Distinct from ``speaking`` because the user-facing visuals differ:
+    speaking = audio bars driven by RMS; working = soft indeterminate
+    pulse. Both can be active simultaneously.
+    """
+    payload: dict[str, Any] = {"type": "working", "state": state}
+    if label:
+        payload["label"] = label
+    await _fanout(payload)
+
+
 async def broadcast_speaking(state: str, level: float | None = None) -> None:
     """Fan out a ``speaking`` frame to every connected client.
 

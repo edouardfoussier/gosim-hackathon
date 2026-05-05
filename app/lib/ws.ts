@@ -15,6 +15,24 @@ export type ServerEvent =
       level?: "phishing" | "suspicious" | "clear" | "warning" | "danger";
       message: string;
     }
+  // Mirrors the backend's bus.broadcast_speaking — the frontend echoes
+  // its own gpt-realtime audio levels here, but listening to the WS lets
+  // any other surface (cursor halo, status pill, future Tauri overlay)
+  // react to the same signal without duplicating the analyser.
+  | {
+      type: "speaking";
+      state: "start" | "stop";
+      level?: number;
+    }
+  // Working = silent agent activity (vision call, scam analysis, AppleScript
+  // automation). Distinct from speaking because Margaret should see the
+  // halo even when Xiexie isn't talking. ``label`` is a short hint
+  // (e.g. "looking at your screen") rendered next to the bars.
+  | {
+      type: "working";
+      state: "start" | "stop";
+      label?: string;
+    }
   | { type: "done" }
   | { type: "pong" }
   | { type: "error"; message: string };
