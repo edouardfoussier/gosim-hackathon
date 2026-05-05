@@ -135,9 +135,12 @@ def _ensure_mail_running(grace_s: float = 5.0) -> bool:
 
 
 # ─── AppleScript template for listing unread inbox messages ──────────────
-# We pull the most-recent ``LIMIT`` unread messages of *every* account's
-# inbox (Mail.app's top-level ``inbox`` is a unified inbox across accounts).
-# Field order MUST match ``_FIELD_NAMES`` below.
+# Mail.app's unified ``inbox`` is sorted newest-first. We *don't* use
+# ``whose read status is false`` — on a 500+ message inbox that filter
+# walks the whole store and is the difference between a 1 s call and a
+# 30 s timeout. Instead we scan the top ``__SCAN__`` newest messages in
+# Python-style and break after ``__LIMIT__`` unread hits. Field order
+# MUST match ``_FIELD_NAMES`` below.
 _LIST_UNREAD_SCRIPT = """
 on iso8601(d)
     set y to year of d as integer
@@ -158,34 +161,45 @@ end iso8601
 set FS to (ASCII character 31)
 set RS to (ASCII character 30)
 set out to ""
+set foundCount to 0
 
 tell application "Mail"
-    set theMessages to (messages of inbox whose read status is false)
-    set msgCount to count of theMessages
-    set startIdx to msgCount - __LIMIT__ + 1
-    if startIdx < 1 then set startIdx to 1
-    repeat with i from msgCount to startIdx by -1
+    set inboxRef to inbox
+    set totalCount to count of messages of inboxRef
+    set scanLimit to __SCAN__
+    if scanLimit > totalCount then set scanLimit to totalCount
+    repeat with i from 1 to scanLimit
+        if foundCount is __LIMIT__ then exit repeat
         try
-            set theMessage to item i of theMessages
-            set msgId to message id of theMessage
-            set msgSender to sender of theMessage
-            set msgSubject to subject of theMessage
-            set msgDateRaw to date received of theMessage
-            set msgDate to my iso8601(msgDateRaw)
-            set msgRead to (read status of theMessage) as string
-            set msgHeaders to all headers of theMessage
-            set msgContent to content of theMessage
-            try
-                set msgTo to address of to recipient 1 of theMessage
-            on error
-                set msgTo to ""
-            end try
-            set out to out & msgId & FS & msgSender & FS & msgSubject & FS & msgDate & FS & msgRead & FS & msgTo & FS & msgHeaders & FS & msgContent & RS
+            set theMessage to message i of inboxRef
+            if (read status of theMessage) is false then
+                set msgId to message id of theMessage
+                set msgSender to sender of theMessage
+                set msgSubject to subject of theMessage
+                set msgDateRaw to date received of theMessage
+                set msgDate to my iso8601(msgDateRaw)
+                set msgHeaders to all headers of theMessage
+                set msgContent to content of theMessage
+                try
+                    set msgTo to address of to recipient 1 of theMessage
+                on error
+                    set msgTo to ""
+                end try
+                set out to out & msgId & FS & msgSender & FS & msgSubject & FS & msgDate & FS & "false" & FS & msgTo & FS & msgHeaders & FS & msgContent & RS
+                set foundCount to foundCount + 1
+            end if
         end try
     end repeat
 end tell
 return out
 """
+
+# How many of the most-recent inbox messages to scan when looking for
+# unread ones. Empirically a 500-message inbox returns its first 200 in
+# under 6 s with the per-message access pattern above; demo accounts
+# rarely have more than a handful of unread emails, so 200 is a comfortable
+# upper bound that keeps us well below the 20 s timeout.
+_SCAN_LIMIT = 200
 
 # Order MUST match the AppleScript output above.
 _FIELD_NAMES = (
@@ -312,8 +326,12 @@ def list_unread(limit: int = 10) -> list[dict[str, Any]]:
         _cache_set(cache_key, [])
         return []
 
-    script = _LIST_UNREAD_SCRIPT.replace("__LIMIT__", str(int(limit)))
-    ok, out = _osascript(script, timeout=10)
+    script = (
+        _LIST_UNREAD_SCRIPT
+        .replace("__LIMIT__", str(int(limit)))
+        .replace("__SCAN__", str(_SCAN_LIMIT))
+    )
+    ok, out = _osascript(script, timeout=20)
     if not ok:
         logger.warning("AppleScript list_unread failed: %s", out[:200])
         _cache_set(cache_key, [])
