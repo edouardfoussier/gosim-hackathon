@@ -7,6 +7,7 @@ export type ServerEvent =
   | { type: "skill_start"; name: string; args: Record<string, unknown> }
   | { type: "skill_result"; name: string; result: string }
   | { type: "skill_error"; name: string; error: string }
+  | { type: "alert"; level?: "warning" | "danger"; message: string }
   | { type: "done" }
   | { type: "pong" }
   | { type: "error"; message: string };
