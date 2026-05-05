@@ -42,6 +42,7 @@ dependencies = [
     # browser automation (heavy — install separately if needed)
     # "browser-use>=0.1.40",
     # "playwright>=1.49",
+    "python-multipart>=0.0.27",
 ]
 
 [project.optional-dependencies]

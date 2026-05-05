@@ -23,7 +23,7 @@ class Config:
     # mentor on-site. See ADR in CLAUDE.md for the full reasoning.
     ZAI_API_KEY: str | None = os.getenv("ZAI_API_KEY")
     ZAI_BASE_URL: str = os.getenv("ZAI_BASE_URL", "https://api.r9s.ai/v1")
-    ZAI_MODEL: str = os.getenv("ZAI_MODEL", "deepseek-v4-pro")
+    ZAI_MODEL: str = os.getenv("ZAI_MODEL", "glm-5.1")
     # Empty string = vision unavailable on this provider; LLMProvider.see()
     # raises a clean error if called instead of silently calling a non-vision model.
     ZAI_VISION_MODEL: str = os.getenv("ZAI_VISION_MODEL", "")

@@ -365,32 +365,33 @@ Primary demo runs against `data/demo/inbox.json` for full reproducibility.
 For Q&A robustness, Edouard also plants a real test email in his Mail.app
 the night before; we can swap to Mail.app live if a judge asks.
 
-### 2026-05-05 (mid-afternoon) — LLM default switched: deepseek-v4-pro
-We initially set GLM-5.1 as the default (Z.AI sponsor lock). Empirical
-testing on the GOSIM proxy (`api.r9s.ai/v1`) found that **GLM-5/5.1 run in
-Thinking Mode by default and bleed chain-of-thought into the `content`
-field**. The proxy strips both ``extra_body={"thinking": {"type":
-"disabled"}}`` and ``enable_thinking: false``. A strong system-prompt
-directive does not help — the model is trained to dump CoT regardless.
+### 2026-05-05 (mid-afternoon) — GLM-5.1 Thinking-Mode resolved (REVERTED)
+**Initial finding** (kept here for the bug log): GLM-5.1 on the GOSIM proxy
+(`api.r9s.ai/v1`) appeared to run in Thinking Mode regardless of suppression
+flags, leaking chain-of-thought into ``message.content``. We had switched
+the default to ``deepseek-v4-pro``.
 
-DeepSeek-V4-Pro on the same proxy:
-- separates ``content`` (clean answer) from ``reasoning_content`` (CoT we
-  ignore)
-- supports tool-calling natively
-- supports ``response_format={"type":"json_object"}`` cleanly
-- zero CoT leak
+**Resolution**: per [Z.AI's thinking-mode docs](https://docs.z.ai/guides/capabilities/thinking-mode), the canonical disable
+field is **only** ``thinking={"type":"disabled"}`` (no underscored
+synonyms). Our wrapper was over-eager and sent four sibling fields
+(``enable_thinking``, ``thinking_mode``, ``do_sample``, …) plus a
+no-CoT system-message prefix. **The proxy chokes on the unknown siblings
+and falls back to thinking-mode-on**. Sending only the canonical field
+yields perfectly clean output:
+```
+content: 'I truly appreciate it.'
+reasoning_content: ''
+```
 
-For demo reliability we default to ``deepseek-v4-pro`` (with
-``deepseek-v4-flash`` as fallback). The provider abstraction
-(``backend/xiexie/llm/provider.py``) is provider-agnostic — both DeepSeek
-and GLM are Chinese open-source models featured at the hackathon, so the
-sponsor story stays consistent: *"Xiexie's brain is a hot-swappable
-GLM/DeepSeek architecture; we picked DeepSeek for demo reliability after
-hitting a Thinking Mode quirk on the proxy."*
+Default model reverted to ``glm-5.1`` (sponsor lock respected). DeepSeek
+remains a tested fallback via ``ZAI_FALLBACK_MODEL``. The story for the
+pitch is now fully on-brand: *"Xiexie's brain is GLM-5.1 by Z.AI, with a
+hot-swappable provider abstraction so any open-source model with
+tool-calling works."*
 
-If a direct Z.AI key (``api.z.ai/api/paas/v4``) lands during the
-hackathon, we switch back to GLM-5.1 — direct Z.AI properly honours the
-``thinking`` parameter and unlocks vision (GLM-5V) + audio (GLM-ASR-2512).
+The strip post-process is kept as belt-and-braces (it only scrubs
+``<thinking>…</thinking>`` blocks and a literal ``thinking:`` prefix —
+no longer attempts paragraph recovery, which was over-truncating).
 
 ### 2026-05-05 (early afternoon) — Wire 3 free-tier external APIs
 Audit of the 2026 landscape (FTC API, urlscan.io, PhishTank/OpenPhish,

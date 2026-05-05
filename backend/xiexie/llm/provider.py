@@ -19,28 +19,15 @@ from openai import OpenAI
 
 from ..config import config
 
-# GLM-5.x defaults to a "Thinking Mode" that bleeds chain-of-thought into
-# ``message.content``. The proxy doesn't forward our extra_body fields
-# reliably, so we layer three defenses:
-#   (1) extra_body hint (no-op when ignored)
-#   (2) a system-message directive prepended to *every* call
-#   (3) post-process strip that recovers a quoted final answer when the
-#       model dumps a long self-analysis instead of an answer.
+# GLM-5.x defaults to Thinking Mode (per Z.AI docs at
+# https://docs.z.ai/guides/capabilities/thinking-mode). The canonical disable
+# field is ``thinking={"type":"disabled"}``. The GOSIM proxy
+# (api.r9s.ai/v1) honours this exact field; adding undocumented siblings
+# (``enable_thinking``, ``thinking_mode``, …) confuses it and produces
+# malformed output, so we send ONLY the canonical param.
 _GLM_NO_THINKING_EXTRA = {
     "thinking": {"type": "disabled"},
-    "enable_thinking": False,
-    "thinking_mode": False,
-    "do_sample": True,
 }
-
-_NO_COT_DIRECTIVE = (
-    "OUTPUT FORMAT (non-negotiable): respond with the final answer ONLY. "
-    "Do not narrate your reasoning, do not enumerate steps, do not write "
-    "'Let me think' or 'First I will…'. No bullet lists of self-analysis. "
-    "Skip preambles. If the user asks a question, answer in at most 2 short "
-    "sentences unless they explicitly request more. If they ask for "
-    "structured output (JSON, table, code), produce ONLY that structure."
-)
 
 _THINKING_TAG_RE = re.compile(
     r"<thinking>.*?</thinking>\s*",
@@ -96,21 +83,6 @@ class LLMProvider:
         max_tokens: int = 1024,
         json_mode: bool = False,
     ) -> LLMResponse:
-        # On GLM, prepend an explicit "no chain-of-thought" directive into
-        # the system message (or create one if absent). This is the
-        # strongest signal we have to suppress Thinking Mode and survives
-        # even when ``extra_body`` fields are stripped by the GOSIM proxy.
-        if self.name == "zai":
-            messages = list(messages)  # don't mutate the caller's list
-            if messages and messages[0].get("role") == "system":
-                head = messages[0]
-                messages[0] = {
-                    **head,
-                    "content": _NO_COT_DIRECTIVE + "\n\n" + (head.get("content") or ""),
-                }
-            else:
-                messages.insert(0, {"role": "system", "content": _NO_COT_DIRECTIVE})
-
         kwargs: dict[str, Any] = dict(
             model=self.model,
             messages=messages,
