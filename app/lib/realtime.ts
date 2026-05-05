@@ -88,6 +88,20 @@ export async function fetchVoiceCapabilities(
   }
 }
 
+// ── speaking-event tunables ─────────────────────────────────────────────
+// How often we sample + ship an RMS amplitude to the backend overlay.
+// 100 ms gives the cursor-following soundwave a snappy reaction without
+// flooding the loopback WS (~10 frames/s, ~50-byte payload each).
+const SPEAKING_LEVEL_INTERVAL_MS = 100;
+// How long Marin must be quiet before we emit a `stop`. Realtime audio
+// has tiny gaps between phonemes that produce sub-1 ms of silence; we
+// only care about end-of-utterance, which is reliably > 300 ms.
+const SPEAKING_SILENCE_THRESHOLD_MS = 300;
+// RMS below this counts as "silent enough" for the silence detector.
+// Tuned against gpt-realtime's `marin` voice — utterance tails sit ~0.01,
+// pure silence ~0.002, so 0.005 is a safe middle.
+const SPEAKING_SILENCE_RMS = 0.005;
+
 export class RealtimeClient {
   private pc: RTCPeerConnection | null = null;
   private dc: RTCDataChannel | null = null;
@@ -97,6 +111,18 @@ export class RealtimeClient {
   private model = "gpt-realtime";
   private onEvent: (event: RealtimeEvent) => void = () => {};
   private connected = false;
+
+  // ── speaking-overlay plumbing ─────────────────────────────────────────
+  // The remote audio track is fed into a Web Audio analyser; a 100 ms
+  // timer reads the RMS, ships it to `POST /voice/speaking`, and
+  // detects end-of-utterance silence so we can emit the matching `stop`.
+  // Everything tears down in `stop()`.
+  private remoteAudioContext: AudioContext | null = null;
+  private remoteAnalyser: AnalyserNode | null = null;
+  private remoteAnalyserBuffer: Uint8Array | null = null;
+  private speakingTimer: ReturnType<typeof setInterval> | null = null;
+  private speakingActive = false;
+  private lastNonSilentMs = 0;
 
   isConnected(): boolean {
     return this.connected;
@@ -138,6 +164,13 @@ export class RealtimeClient {
       if (stream && this.remoteAudio) {
         this.remoteAudio.srcObject = stream;
         this.onEvent({ type: "model_audio_started" });
+        // Spin up the analyser on the FIRST inbound track so the
+        // soundwave overlay can reflect Marin's voice as RMS amplitude.
+        // We tolerate failure here (no AudioContext, autoplay blocked,
+        // backend offline, etc.) — the overlay's procedural fallback
+        // means losing this path degrades gracefully rather than
+        // breaking the voice loop.
+        this.attachRemoteAnalyser(stream);
       }
     };
 
@@ -216,6 +249,8 @@ export class RealtimeClient {
       this.remoteAudio.remove();
       this.remoteAudio = null;
     }
+
+    this.detachRemoteAnalyser();
   }
 
   /** Inject a typed message into the live voice conversation. */
@@ -236,6 +271,137 @@ export class RealtimeClient {
   }
 
   // ── private ───────────────────────────────────────────────────────────
+
+  /**
+   * Attach a Web Audio analyser to the inbound voice track so we can
+   * sample RMS amplitudes and ship them to the native overlay daemon.
+   *
+   * We POST to `/voice/speaking` ~10×/s while audio is non-silent and
+   * emit a single `state: stop` once silence persists for
+   * `SPEAKING_SILENCE_THRESHOLD_MS`. The daemon falls back to its
+   * procedural sine animation if amplitudes never arrive.
+   */
+  private attachRemoteAnalyser(stream: MediaStream): void {
+    if (typeof window === "undefined") return;
+    this.detachRemoteAnalyser();
+
+    const AudioContextCtor =
+      window.AudioContext ||
+      (window as unknown as { webkitAudioContext?: typeof AudioContext })
+        .webkitAudioContext;
+    if (!AudioContextCtor) return;
+
+    let ctx: AudioContext;
+    try {
+      ctx = new AudioContextCtor();
+    } catch {
+      return;
+    }
+
+    let analyser: AnalyserNode;
+    try {
+      const source = ctx.createMediaStreamSource(stream);
+      analyser = ctx.createAnalyser();
+      analyser.fftSize = 256;
+      analyser.smoothingTimeConstant = 0.5;
+      source.connect(analyser);
+    } catch {
+      void ctx.close().catch(() => {});
+      return;
+    }
+
+    this.remoteAudioContext = ctx;
+    this.remoteAnalyser = analyser;
+    this.remoteAnalyserBuffer = new Uint8Array(analyser.frequencyBinCount);
+    this.lastNonSilentMs = performance.now();
+
+    this.speakingTimer = setInterval(
+      () => this.tickSpeakingLevel(),
+      SPEAKING_LEVEL_INTERVAL_MS
+    );
+  }
+
+  private detachRemoteAnalyser(): void {
+    if (this.speakingTimer) {
+      clearInterval(this.speakingTimer);
+      this.speakingTimer = null;
+    }
+    if (this.speakingActive) {
+      // Best-effort: tell the overlay to fade out even if the page is
+      // closing. We deliberately don't await — a navigation away can
+      // cancel the fetch and that's fine.
+      void this.postSpeaking({ state: "stop" });
+      this.speakingActive = false;
+    }
+    if (this.remoteAudioContext && this.remoteAudioContext.state !== "closed") {
+      void this.remoteAudioContext.close().catch(() => {});
+    }
+    this.remoteAudioContext = null;
+    this.remoteAnalyser = null;
+    this.remoteAnalyserBuffer = null;
+  }
+
+  /**
+   * One frame of the speaking-level loop. Reads RMS from the remote
+   * analyser, ships the amplitude while non-silent, and emits the
+   * matching `stop` once silence persists past the threshold.
+   */
+  private tickSpeakingLevel(): void {
+    const analyser = this.remoteAnalyser;
+    const buffer = this.remoteAnalyserBuffer;
+    if (!analyser || !buffer) return;
+
+    analyser.getByteTimeDomainData(buffer as unknown as Uint8Array<ArrayBuffer>);
+    let sumSquares = 0;
+    for (let i = 0; i < buffer.length; i++) {
+      const centered = (buffer[i] - 128) / 128;
+      sumSquares += centered * centered;
+    }
+    const rms = Math.sqrt(sumSquares / buffer.length);
+    // Light gain so realistic Marin levels (~0.05–0.2 RMS) push the
+    // bars near full height without clipping.
+    const level = Math.min(1, rms * 3.2);
+    const now = performance.now();
+
+    if (rms > SPEAKING_SILENCE_RMS) {
+      this.lastNonSilentMs = now;
+      if (!this.speakingActive) {
+        this.speakingActive = true;
+      }
+      void this.postSpeaking({ state: "start", level });
+      return;
+    }
+
+    if (
+      this.speakingActive &&
+      now - this.lastNonSilentMs > SPEAKING_SILENCE_THRESHOLD_MS
+    ) {
+      this.speakingActive = false;
+      void this.postSpeaking({ state: "stop" });
+    }
+  }
+
+  private async postSpeaking(body: {
+    state: "start" | "stop";
+    level?: number;
+  }): Promise<void> {
+    if (!this.backendUrl) return;
+    try {
+      await fetch(`${this.backendUrl}/voice/speaking`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        // Best-effort: drop the response, don't keep the connection
+        // open longer than needed. `keepalive` lets the request survive
+        // a fast navigation away from the page.
+        keepalive: true,
+      });
+    } catch {
+      // Overlay daemon offline / backend rebooting — silent. The
+      // native overlay falls back to procedural mode the moment the
+      // next `start` (with or without a level) lands.
+    }
+  }
 
   private async mintToken(): Promise<SessionTokenResponse> {
     const res = await fetch(`${this.backendUrl}/voice/session`, { method: "POST" });
