@@ -112,14 +112,16 @@ THEMES: dict[str, GlyphTheme] = {
     ),
 }
 
-# Final glyph footprint: 64×64 (was ~48 — bumped for senior visibility).
-# The window itself is much larger so the pulsing glow and the tooltip
-# pill have room to breathe without their bounding rect leaking out.
-GLYPH_INNER = 64
-GLOW_PAD = 32          # extra room around the glyph for the soft glow
-TOOLTIP_GAP = 14       # space between the glyph and the tooltip pill
-WINDOW_W = 360
-WINDOW_H = 220
+# Final glyph footprint: 96×96 (bumped from 64 after live retest — too
+# subtle on a 27" monitor at arm's length, which is the senior demo
+# context). The window itself is much larger so the pulsing glow and
+# the tooltip pill have room to breathe without their bounding rect
+# leaking out.
+GLYPH_INNER = 96
+GLOW_PAD = 40          # extra room around the glyph for the soft glow
+TOOLTIP_GAP = 18       # space between the glyph and the tooltip pill
+WINDOW_W = 420
+WINDOW_H = 260
 
 
 # ── geometry helpers ───────────────────────────────────────────────────

@@ -13,6 +13,7 @@ inserting confirmation prompts for ``destructive`` skills.
 from __future__ import annotations
 
 import json
+import random
 import re
 from dataclasses import dataclass
 from typing import Any
@@ -21,6 +22,78 @@ from ..llm import get_provider
 from ..memory import Wiki
 from ..skills import SKILLS, analyze_email as _analyze_email
 from ..skills.registry import all_tool_schemas
+
+# Varied warm preambles spoken WHILE a skill runs. The model is supposed
+# to emit one in ``content`` alongside its ``tool_calls``, but in
+# practice GLM-4.6 returns empty content half the time when the system
+# prompt is long. Falling back to a generic "Let me work on that" makes
+# Xiexie sound robotic, so we pick a per-skill warm preamble client-side
+# whenever the model leaves ``content`` empty.
+_SKILL_PREAMBLES: dict[str, list[str]] = {
+    "open_app": [
+        "Sure, opening {name} for you now.",
+        "Of course — let me bring up {name}.",
+        "Yes of course, opening {name} right now.",
+    ],
+    "read_emails": [
+        "Of course, let me check your inbox.",
+        "Sure thing — looking at your unread emails now.",
+        "Yes — let me see what came in.",
+    ],
+    "analyze_email": [
+        "Yes of course, let me have a closer look at that one.",
+        "Sure, I'll go through it carefully for you.",
+        "Of course — checking it now, this'll just take a moment.",
+    ],
+    "archive_email": [
+        "Of course, archiving it for you.",
+        "Sure, moving it out of your inbox.",
+        "Yes — getting that out of the way.",
+    ],
+    "report_to_family": [
+        "Of course, drafting a note to your family right now.",
+        "Sure — let me put together a heads-up.",
+        "Yes, I'll write to them for you.",
+    ],
+    "set_reminder": [
+        "Of course, adding that reminder for you.",
+        "Sure — let me set that up.",
+        "Yes, I'll make a note of it.",
+    ],
+    "find_file": [
+        "Sure, let me look for that on your computer.",
+        "Of course — searching for it now.",
+        "Yes — let me find it for you.",
+    ],
+    "zoom_text": [
+        "Sure, making things bigger for you.",
+        "Of course — easier on the eyes coming up.",
+        "Yes, let me adjust that.",
+    ],
+    "read_screen": [
+        "Of course, let me have a look at what's on your screen.",
+        "Sure — looking at it now.",
+        "Yes, I'll check it for you.",
+    ],
+    "daily_brief": [
+        "Of course, let me put together your morning briefing.",
+        "Sure — gathering everything for you.",
+    ],
+}
+
+
+def _generate_preamble(skill: str, args: dict[str, Any]) -> str:
+    """Pick a warm conversational preamble for a skill, formatted with args."""
+    options = _SKILL_PREAMBLES.get(skill)
+    if not options:
+        return "Of course, let me work on that for you."
+    template = random.choice(options)
+    try:
+        return template.format(**args)
+    except (KeyError, IndexError, ValueError):
+        # ``args`` doesn't have the keys the template expected — fall back
+        # to the format string unrendered.
+        return template.replace("{name}", "that").replace("{recipient_hint}", "your family")
 
 # Short affirmative phrases that mean "fire the pending follow-up". Kept
 # permissive on punctuation/casing so "Yes please." and "yeah, go ahead!"
@@ -199,10 +272,15 @@ class Planner:
         # Tool list = real skills + the narrate sentinel.
         tools = all_tool_schemas() + [_NARRATE_TOOL]
 
-        # On Z.AI proxies (GLM-5.x) ``tool_choice="auto"`` reliably yields
-        # narration with no tool_calls. Forcing ``required`` + the
-        # ``narrate`` sentinel gives the model a clean escape hatch.
-        choice = "required" if self.llm.name == "zai" else "auto"
+        # On the *proxy* (api.r9s.ai) GLM-5.x ignores ``tool_choice="auto"``
+        # so we forced ``required``. On *direct* Z.AI (api.z.ai) GLM-4.6
+        # dispatches cleanly *and* emits a conversational preamble in the
+        # ``content`` field when ``auto`` is used — exactly what we want
+        # ("I'll check your inbox for you" instead of the generic
+        # "Let me work on that" fallback). Detect by base URL.
+        base_url = str(getattr(self.llm.client, "base_url", "")).lower()
+        on_proxy = "r9s.ai" in base_url
+        choice = "required" if on_proxy else "auto"
 
         resp = self.llm.chat(
             messages=messages,
@@ -236,12 +314,16 @@ class Planner:
             steps.append(PlanStep(skill=tc["name"], arguments=args, speak_before=speak_before))
 
         # Order of preference for the spoken reply:
-        # 1. Real text from the model (rare on GLM in required mode)
-        # 2. The narrate sentinel's reply
-        # 3. Default preamble depending on whether we have steps to run
-        spoken = (
-            resp.text.strip()
-            or narrate_reply
-            or ("Let me work on that." if steps else "I don't know how to do that yet — taking a note.")
-        )
+        # 1. Real text from the model (the warm preamble it generated alongside the tool_calls)
+        # 2. The narrate sentinel's reply (when no real skill matched)
+        # 3. A varied per-skill preamble — keeps Xiexie sounding human even
+        #    when GLM-4.6 leaves ``content`` empty (which it does roughly
+        #    50% of the time on long system prompts). Picks based on the
+        #    first skill the planner is about to run.
+        # 4. Last-resort fallback narration.
+        spoken = resp.text.strip() or narrate_reply
+        if not spoken and steps:
+            spoken = _generate_preamble(steps[0].skill, steps[0].arguments)
+        if not spoken:
+            spoken = "I don't know how to do that yet — taking a note."
         return PlanResult(speak=spoken, steps=steps, raw_text=resp.text)

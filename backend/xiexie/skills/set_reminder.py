@@ -35,12 +35,22 @@ def run(args: dict[str, Any]) -> str:
     except ValueError:
         return f"I couldn't read that time ({when_iso!r}). Try ISO 8601, e.g. 2026-05-05T15:30."
 
-    # AppleScript date format: "May 5, 2026 3:30:00 PM"
-    apple_when = when.strftime("%B %d, %Y %I:%M:%S %p")
+    # AppleScript's ``date "..."`` constructor is locale-sensitive and
+    # rejects perfectly-valid US-formatted strings on French / Chinese /
+    # German locales (the user's previous "Invalid date and time date
+    # May 05, 2026 03:30:00 PM" error). We build the date with explicit
+    # property setters instead — bulletproof across every locale.
     safe_what = what.replace('"', "'")
     script = f'''
+    set targetDate to current date
+    set year of targetDate to {when.year}
+    set month of targetDate to {when.month}
+    set day of targetDate to {when.day}
+    set hours of targetDate to {when.hour}
+    set minutes of targetDate to {when.minute}
+    set seconds of targetDate to 0
     tell application "Reminders"
-        set newReminder to make new reminder with properties {{name:"{safe_what}", remind me date:date "{apple_when}"}}
+        set newReminder to make new reminder with properties {{name:"{safe_what}", remind me date:targetDate}}
     end tell
     '''
     ok, output = _osascript(script)

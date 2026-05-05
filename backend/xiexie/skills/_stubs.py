@@ -39,26 +39,6 @@ def _stub_run(skill_name: str, friendly: str):
     return _run
 
 
-# ── zoom_text ─────────────────────────────────────────────────────────────
-register(
-    Skill(
-        name="zoom_text",
-        description="Increase text size on the active app or system-wide (macOS zoom).",
-        parameters={
-            "type": "object",
-            "properties": {
-                "amount": {"type": "string", "enum": ["smaller", "normal", "bigger", "much bigger"], "default": "bigger"},
-            },
-        },
-        run=_stub_run(
-            "zoom_text",
-            "I'll make things bigger for you — give me a second, this is one I'm still learning.",
-        ),
-        tags=["accessibility", "stub"],
-    )
-)
-
-
 # ── login_site ────────────────────────────────────────────────────────────
 register(
     Skill(

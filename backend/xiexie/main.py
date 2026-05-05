@@ -44,6 +44,30 @@ app.add_middleware(
 )
 
 
+@app.on_event("startup")
+async def _warmup() -> None:
+    """Pre-load the faster-whisper model in a background thread.
+
+    Without this the first ``POST /transcribe`` call takes 8–12 s on a
+    cold cache while the model downloads + loads — confusing during the
+    live demo because the user sees ``transcribing…`` hang for ages.
+    Warming on startup makes the first real request feel instant.
+    """
+    import threading
+
+    def _load() -> None:
+        try:
+            from .voice import stt
+
+            # Touch the lazy-loaded model so the heavy import happens
+            # off the request hot path.
+            stt._model()  # noqa: SLF001 — internal warmup call
+        except Exception:  # noqa: BLE001 — warmup is best-effort
+            pass
+
+    threading.Thread(target=_load, daemon=True, name="whisper-warmup").start()
+
+
 # ── lazily share one planner + wiki across requests ──────────────────────
 _planner: Planner | None = None
 
@@ -183,6 +207,14 @@ async def ws_endpoint(ws: WebSocket) -> None:
                         await ws.send_json(
                             {"type": "skill_result", "name": step.skill, "result": result}
                         )
+                        # Read-style skills should be spoken aloud — the
+                        # planner's preamble was just "Let me check…" and
+                        # the Margaret-friendly summary lives in the
+                        # skill result. ``analyze_email`` is excluded
+                        # because the verdict bus already broadcasts a
+                        # spoken alert with the warm GLM-4.6 paragraph.
+                        if step.skill in {"read_emails", "find_file", "daily_brief"}:
+                            await ws.send_json({"type": "speak", "text": result})
                         # Money-shot bridge: when ``analyze_email`` finishes,
                         # fan out the verdict to every overlay subscriber so
                         # the warning halo lights up automatically.

@@ -28,8 +28,23 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className={`${inter.variable} ${fraunces.variable}`}>
-      <body className="font-[family-name:var(--font-inter)]">{children}</body>
+    <html
+      lang="en"
+      className={`${inter.variable} ${fraunces.variable}`}
+      suppressHydrationWarning
+    >
+      {/*
+        suppressHydrationWarning silences the noisy "cz-shortcut-listen"
+        diff that ColorZilla / Grammarly / 1Password browser extensions
+        inject into <body> before React hydrates. Strictly cosmetic —
+        no functional impact.
+      */}
+      <body
+        className="font-[family-name:var(--font-inter)]"
+        suppressHydrationWarning
+      >
+        {children}
+      </body>
     </html>
   );
 }
