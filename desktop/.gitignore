@@ -1,0 +1,14 @@
+# Rust build artefacts
+src-tauri/target/
+
+# Tauri-generated capability schemas + Cargo.lock for the desktop crate
+src-tauri/gen/
+src-tauri/Cargo.lock
+
+# PyInstaller artefacts (kept out of git — built on demand)
+src-tauri/binaries/xiexie-backend/
+src-tauri/binaries/xiexie-overlay/
+
+# Bundles (built into target/, just in case anyone copies them out)
+*.dmg
+*.app

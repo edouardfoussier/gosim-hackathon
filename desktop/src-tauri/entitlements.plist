@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <!-- Microphone access for the wake-word + STT pipeline. -->
+  <key>com.apple.security.device.audio-input</key>
+  <true/>
+
+  <!-- AppleScript / System Events automation for `open_app`,
+       `archive_email`, `set_reminder`, `report_to_family`, etc. -->
+  <key>com.apple.security.automation.apple-events</key>
+  <true/>
+
+  <!-- Required by PyInstaller-packaged Python. The frozen interpreter
+       allocates writable+executable memory at startup; without this
+       entitlement Gatekeeper SIGKILLs the child on first launch. -->
+  <key>com.apple.security.cs.allow-unsigned-executable-memory</key>
+  <true/>
+  <key>com.apple.security.cs.allow-jit</key>
+  <true/>
+
+  <!-- PyInstaller bundles bring their own copies of dynamic libraries
+       (numpy, faster-whisper, PyQt6) that aren't signed by Apple — relax
+       the loader so the child can dlopen them. -->
+  <key>com.apple.security.cs.disable-library-validation</key>
+  <true/>
+
+  <!-- Outbound networking (Z.AI proxy, Tavily, urlscan.io, Picovoice). -->
+  <key>com.apple.security.network.client</key>
+  <true/>
+
+  <!-- Inbound networking on localhost for the FastAPI backend (8787)
+       and its WebSocket. ``network.server`` is required even for
+       loopback under the hardened runtime. -->
+  <key>com.apple.security.network.server</key>
+  <true/>
+</dict>
+</plist>

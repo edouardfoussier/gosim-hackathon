@@ -54,5 +54,15 @@ models/
 *.bin
 *.gguf
 
-# tauri (if we wrap later)
+# tauri / desktop bundle
 src-tauri/target/
+desktop/src-tauri/target/
+desktop/src-tauri/Cargo.lock
+desktop/src-tauri/binaries/xiexie-backend/
+desktop/src-tauri/binaries/xiexie-overlay/
+
+# pyinstaller stray artefacts at the source-package roots
+backend/xiexie-backend.spec
+overlay/xiexie-overlay.spec
+backend/dist/
+overlay/dist/

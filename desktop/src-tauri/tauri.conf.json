@@ -1,0 +1,85 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Xiexie",
+  "version": "0.1.0",
+  "identifier": "ai.xiexie.app",
+  "build": {
+    "beforeDevCommand": "cd ../../app && pnpm dev",
+    "devUrl": "http://localhost:3000",
+    "beforeBuildCommand": "../scripts/build-frontend.sh",
+    "frontendDist": "../../app/out"
+  },
+  "app": {
+    "macOSPrivateApi": true,
+    "withGlobalTauri": false,
+    "windows": [
+      {
+        "label": "main",
+        "title": "Xiexie",
+        "width": 480,
+        "height": 720,
+        "minWidth": 420,
+        "minHeight": 600,
+        "resizable": false,
+        "decorations": false,
+        "transparent": true,
+        "shadow": true,
+        "alwaysOnTop": false,
+        "focus": true,
+        "visible": false,
+        "fullscreen": false,
+        "skipTaskbar": true,
+        "hiddenTitle": true,
+        "titleBarStyle": "Overlay",
+        "url": "index.html"
+      }
+    ],
+    "security": {
+      "csp": null,
+      "freezePrototype": false
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["app", "dmg"],
+    "publisher": "Xiexie",
+    "category": "Utility",
+    "shortDescription": "AI grandchild for seniors — scam shield + computer use",
+    "longDescription": "Xiexie is a voice-first AI grandchild for seniors. It detects email scams with multi-tool reasoning (header forensics + URL sandbox + web intelligence), helps with computer tasks, and learns the user a little more after every interaction via a self-maintained markdown wiki. Local-first, privacy-respecting, open source.",
+    "copyright": "© 2026 Edouard Foussier — MIT license",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.png"
+    ],
+    "resources": [
+      "binaries/xiexie-backend/**/*",
+      "binaries/xiexie-overlay/**/*"
+    ],
+    "macOS": {
+      "frameworks": [],
+      "minimumSystemVersion": "13.0",
+      "entitlements": "entitlements.plist",
+      "exceptionDomain": "",
+      "signingIdentity": null,
+      "providerShortName": null,
+      "dmg": {
+        "background": null,
+        "windowSize": {
+          "width": 660,
+          "height": 400
+        },
+        "appPosition": {
+          "x": 180,
+          "y": 170
+        },
+        "applicationFolderPosition": {
+          "x": 480,
+          "y": 170
+        }
+      }
+    }
+  }
+}
