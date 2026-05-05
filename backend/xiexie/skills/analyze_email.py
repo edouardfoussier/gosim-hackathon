@@ -26,6 +26,7 @@ Confidence ladder mirrors the risk-log gradation:
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 from ..external import email_rep
@@ -116,6 +117,186 @@ When in doubt between 'safe' and 'unclear', prefer 'unclear' with a sentence
 explaining the single ambiguity — never invent risks that aren't in the
 evidence above.
 """
+
+
+_DOMAIN_RE = re.compile(r"\b([a-z0-9][a-z0-9\-]*\.[a-z]{2,}(?:\.[a-z]{2,})?)\b", re.I)
+
+
+def _levenshtein(a: str, b: str) -> int:
+    """Tiny Levenshtein implementation — short strings only (domain labels)."""
+    if a == b:
+        return 0
+    if not a:
+        return len(b)
+    if not b:
+        return len(a)
+    prev = list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        curr = [i] + [0] * len(b)
+        for j, cb in enumerate(b, 1):
+            cost = 0 if ca == cb else 1
+            curr[j] = min(curr[j - 1] + 1, prev[j] + 1, prev[j - 1] + cost)
+        prev = curr
+    return prev[-1]
+
+
+def _compact_doubles(s: str) -> str:
+    """Collapse runs of repeated letters: ``aetnna`` → ``aetna``."""
+    return re.sub(r"(.)\1+", r"\1", s)
+
+
+def _split_tld(domain: str) -> tuple[str, str]:
+    """Return (root_label, tld) using the rightmost dot. Naive — good enough
+    for cousin-detection where we only need a same-TLD comparison.
+    """
+    domain = domain.lower().strip(".")
+    if "." not in domain:
+        return domain, ""
+    head, _, tld = domain.rpartition(".")
+    return head.split(".")[-1], tld
+
+
+def _wiki_account_domains(wiki: Wiki) -> list[str]:
+    """Pull out plausible domain tokens from ``wiki/accounts.md``."""
+    page = wiki.get("accounts")
+    if not page:
+        return []
+    found = {m.group(1).lower() for m in _DOMAIN_RE.finditer(page.body)}
+    # Drop obvious noise — schemes already stripped by the regex.
+    return sorted(found)
+
+
+def cousin_domain_check(
+    sender_domain: str | None,
+    known_domains: list[str],
+) -> dict[str, Any]:
+    """Deterministic DKIM-alignment-ish heuristic.
+
+    Returns a structured dict the LLM consumes as one piece of evidence
+    (never the only one). Verdict scale:
+
+    - ``"none"``       — no comparable known domain.
+    - ``"safe"``       — exact match against a known domain.
+    - ``"cousin"``     — close enough to be suspicious (typosquat-ish).
+
+    Each cousin match records the closest known domain, the matching rule,
+    and the edit distance so the LLM can ground its sentence in a specific
+    sign instead of hallucinating a generic "looks like a typosquat".
+    """
+    sd = (sender_domain or "").lower().strip().strip(".")
+    if not sd:
+        return {
+            "sender_domain": "",
+            "known_domains_checked": list(known_domains),
+            "result": "none",
+            "matches": [],
+            "rationale": "no sender domain available",
+        }
+    if not known_domains:
+        return {
+            "sender_domain": sd,
+            "known_domains_checked": [],
+            "result": "none",
+            "matches": [],
+            "rationale": "no known accounts on file",
+        }
+
+    # 1. Exact match — short-circuit safe.
+    if sd in known_domains:
+        return {
+            "sender_domain": sd,
+            "known_domains_checked": list(known_domains),
+            "result": "safe",
+            "matches": [{"known": sd, "rule": "exact", "distance": 0}],
+            "rationale": "sender domain exactly matches a wiki/accounts.md entry",
+        }
+
+    sd_root, sd_tld = _split_tld(sd)
+    sd_compact = _compact_doubles(sd_root)
+
+    matches: list[dict[str, Any]] = []
+    for known in known_domains:
+        if known == sd:
+            continue
+        k_root, k_tld = _split_tld(known)
+        k_compact = _compact_doubles(k_root)
+        dist = _levenshtein(sd_root, k_root)
+
+        # 2. Compact-doubles equality (aetnna ↔ aetna).
+        if sd_compact == k_compact and sd_root != k_root:
+            matches.append(
+                {
+                    "known": known,
+                    "rule": "compact_doubles",
+                    "distance": dist,
+                    "note": f"{sd_root!r} collapses to {sd_compact!r}, identical to {k_root!r}",
+                }
+            )
+            continue
+
+        # 3. One-edit Levenshtein.
+        if dist == 1:
+            matches.append(
+                {
+                    "known": known,
+                    "rule": "levenshtein_1",
+                    "distance": 1,
+                    "note": f"one-character edit away from {known!r}",
+                }
+            )
+            continue
+
+        # 4. Levenshtein 2 with same TLD.
+        if dist == 2 and sd_tld == k_tld and sd_tld:
+            matches.append(
+                {
+                    "known": known,
+                    "rule": "levenshtein_2_same_tld",
+                    "distance": 2,
+                    "note": f"two-character edit away from {known!r} with the same .{sd_tld}",
+                }
+            )
+            continue
+
+        # 5. Shared first 4 characters but ≠. Keep last so the more specific
+        # rules above win when both fire.
+        if len(sd_root) >= 4 and len(k_root) >= 4 and sd_root[:4] == k_root[:4]:
+            matches.append(
+                {
+                    "known": known,
+                    "rule": "shared_prefix_4",
+                    "distance": dist,
+                    "note": f"shares the first 4 characters with {known!r} but the rest differs",
+                }
+            )
+
+    if matches:
+        # Prefer the most specific (lowest distance, then earliest rule index).
+        rule_priority = {
+            "compact_doubles": 0,
+            "levenshtein_1": 1,
+            "levenshtein_2_same_tld": 2,
+            "shared_prefix_4": 3,
+        }
+        matches.sort(key=lambda m: (m["distance"], rule_priority.get(m["rule"], 9)))
+        return {
+            "sender_domain": sd,
+            "known_domains_checked": list(known_domains),
+            "result": "cousin",
+            "matches": matches[:3],
+            "rationale": (
+                f"sender domain {sd!r} is close to a known account domain "
+                f"({matches[0]['known']!r}) by rule {matches[0]['rule']!r}"
+            ),
+        }
+
+    return {
+        "sender_domain": sd,
+        "known_domains_checked": list(known_domains),
+        "result": "none",
+        "matches": [],
+        "rationale": "no comparable known domain (not in accounts.md, not a typosquat)",
+    }
 
 
 def _strip_code_fence(raw: str) -> str:
@@ -244,9 +425,14 @@ def parse_verdict(raw: str) -> dict[str, Any]:
 
 def _build_user_prompt(message: dict[str, Any], url_reports: list[dict[str, Any]],
                        intel: list[dict[str, str]], sender_rep: dict[str, Any],
-                       wiki: Wiki) -> str:
+                       wiki: Wiki, cousin_check: dict[str, Any] | None = None) -> str:
     parts: list[str] = []
     parts.append("## EMAIL\n```json\n" + json.dumps(message, indent=2) + "\n```")
+    if cousin_check is not None:
+        parts.append(
+            "## COUSIN-DOMAIN CHECK (deterministic — one piece of evidence)\n"
+            "```json\n" + json.dumps(cousin_check, indent=2) + "\n```"
+        )
     if url_reports:
         parts.append("## URL FORENSICS\n```json\n" + json.dumps(url_reports, indent=2) + "\n```")
     if sender_rep.get("available"):
@@ -284,9 +470,16 @@ def analyze(message: dict[str, Any]) -> dict[str, Any]:
     pattern_hint = " ".join(sender_brand.split()[:3]) + " phishing"
     intel = _intel.search(pattern_hint)
 
-    # 4. GLM verdict
+    # 4. Cousin-domain check (deterministic, before the LLM call). The
+    # LLM uses this as one piece of evidence, never the only one.
     wiki = Wiki()
-    user_msg = _build_user_prompt(message, url_reports, intel, sender_rep, wiki)
+    sender_domain = (message.get("from", {}).get("domain") or "").lower()
+    cousin_check = cousin_domain_check(sender_domain, _wiki_account_domains(wiki))
+
+    # 5. GLM verdict
+    user_msg = _build_user_prompt(
+        message, url_reports, intel, sender_rep, wiki, cousin_check=cousin_check
+    )
     llm = get_provider()
     resp = llm.chat(
         messages=[
@@ -303,6 +496,7 @@ def analyze(message: dict[str, Any]) -> dict[str, Any]:
         "url_reports": url_reports,
         "sender_reputation": sender_rep,
         "intel": intel,
+        "cousin_domain_check": cousin_check,
         "message_id": message.get("id"),
     }
     return verdict
