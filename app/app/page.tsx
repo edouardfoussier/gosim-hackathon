@@ -10,6 +10,12 @@ import {
   type RealtimeCapabilities,
   type RealtimeEvent,
 } from "@/lib/realtime";
+import {
+  detectCloseWord,
+  isBrowserWakeWordAvailable,
+  startPassiveWakeListener,
+  type PassiveWakeListenerHandle,
+} from "@/lib/wake-listener";
 import { VerdictCard } from "@/components/verdict-card";
 
 type Variant = "phishing" | "suspicious" | "clear";
@@ -68,12 +74,15 @@ export default function Home() {
   );
   const [continuousActive, setContinuousActive] = useState(false);
   const [continuousStarting, setContinuousStarting] = useState(false);
+  const [wakeArmed, setWakeArmed] = useState(false);
+  const [wakeSupported, setWakeSupported] = useState(false);
 
   const wsRef = useRef<WebSocket | null>(null);
   const recorderRef = useRef<MicRecorder | null>(null);
   const ttsRef = useRef<TtsPlayer | null>(null);
   const levelRafRef = useRef<number | null>(null);
   const realtimeRef = useRef<RealtimeClient | null>(null);
+  const wakeRef = useRef<PassiveWakeListenerHandle | null>(null);
 
   const onEvent = useCallback((e: ServerEvent) => {
     switch (e.type) {
@@ -145,12 +154,28 @@ export default function Home() {
       recorderRef.current?.cleanup();
       realtimeRef.current?.stop();
       realtimeRef.current = null;
+      wakeRef.current?.stop();
+      wakeRef.current = null;
       if (levelRafRef.current !== null) {
         cancelAnimationFrame(levelRafRef.current);
       }
       ws.close();
     };
   }, [onEvent]);
+
+  // Arm the passive wake listener as soon as we know the backend has a
+  // continuous voice path (no key → no point arming). Keeps Marin's
+  // mic-claim path snappy: by the time the user says "Xiexie" the
+  // recognizer is already up.
+  useEffect(() => {
+    if (!capabilities?.continuous) return;
+    if (continuousActive || continuousStarting) return;
+    armWakeListener();
+    return () => {
+      // Only tear down on unmount: re-arming is handled by stopContinuous.
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [capabilities?.continuous]);
 
   const submitText = useCallback((text: string) => {
     if (!wsRef.current || !text.trim()) return;
@@ -163,6 +188,13 @@ export default function Home() {
     switch (event.type) {
       case "user_transcript":
         setLog((l) => [...l, { kind: "user", text: event.text }]);
+        // Close-word detection runs on the same transcript stream the
+        // model already sees — no second recognizer required. When the
+        // user politely says "thank you" / "merci" / "xiexie" we close
+        // the realtime channel and re-arm the passive wake listener.
+        if (detectCloseWord(event.text)) {
+          stopContinuousRef.current();
+        }
         return;
       case "assistant_transcript":
         // Realtime streams partial deltas first then a final ``done`` event.
@@ -196,12 +228,52 @@ export default function Home() {
     }
   }, []);
 
+  // Forward declarations so the wake-listener can call ``startContinuous``
+  // before it's defined below. We assign through these refs once the real
+  // closures exist — keeps the dependency graph readable.
+  const startContinuousRef = useRef<() => Promise<void>>(async () => {});
+  const stopContinuousRef = useRef<() => void>(() => {});
+
+  const armWakeListener = useCallback(() => {
+    if (wakeRef.current) return; // already armed
+    if (!isBrowserWakeWordAvailable()) {
+      setWakeSupported(false);
+      return;
+    }
+    setWakeSupported(true);
+    try {
+      const handle = startPassiveWakeListener({
+        onWake: (variant) => {
+          // Wake fired — stop the recognizer immediately so the realtime
+          // session can claim the mic via getUserMedia without contention.
+          handle.stop();
+          wakeRef.current = null;
+          setWakeArmed(false);
+          // Surface the wake in the chat so Margaret sees the trigger.
+          setLog((l) => [
+            ...l,
+            { kind: "skill", name: "wake-word", result: `heard "${variant}"` },
+          ]);
+          void startContinuousRef.current();
+        },
+        onError: (msg) => setMicError(msg),
+        onStateChange: (listening) => setWakeArmed(listening),
+      });
+      wakeRef.current = handle;
+    } catch (err) {
+      // Browser doesn't actually expose the API — flip the flag and move on.
+      setWakeSupported(false);
+    }
+  }, []);
+
   const stopContinuous = useCallback(() => {
     realtimeRef.current?.stop();
     realtimeRef.current = null;
     setContinuousActive(false);
     setSpeaking(false);
-  }, []);
+    // Re-arm the wake listener so the next "Xiexie" reopens the channel.
+    armWakeListener();
+  }, [armWakeListener]);
 
   const startContinuous = useCallback(async () => {
     if (continuousStarting || continuousActive) return;
@@ -210,6 +282,11 @@ export default function Home() {
     // Cancel any local TTS so the browser SpeechSynthesis voice doesn't
     // overlap with Marin's voice coming back over WebRTC.
     ttsRef.current?.cancel();
+    // Make sure the passive listener has released the mic (wake-fire stops
+    // it automatically; this is the manual-click path).
+    wakeRef.current?.stop();
+    wakeRef.current = null;
+    setWakeArmed(false);
     const client = new RealtimeClient();
     try {
       await client.start({ backendUrl: BACKEND_URL, onEvent: handleRealtimeEvent });
@@ -220,10 +297,20 @@ export default function Home() {
         err instanceof Error ? err.message : "could not open voice channel";
       setMicError(message);
       client.stop();
+      // Re-arm the listener since we never opened the realtime mic.
+      armWakeListener();
     } finally {
       setContinuousStarting(false);
     }
-  }, [continuousStarting, continuousActive, handleRealtimeEvent]);
+  }, [continuousStarting, continuousActive, handleRealtimeEvent, armWakeListener]);
+
+  // Wire the ref-based forward declarations so the wake-listener closure
+  // (defined first) can call into the latest ``startContinuous`` /
+  // ``stopContinuous`` without re-arming the listener every render.
+  useEffect(() => {
+    startContinuousRef.current = startContinuous;
+    stopContinuousRef.current = stopContinuous;
+  }, [startContinuous, stopContinuous]);
 
   const tickLevel = useCallback(() => {
     const recorder = recorderRef.current;
@@ -359,6 +446,18 @@ export default function Home() {
             <span className="flex items-center gap-1 text-ember-700">
               <Volume2 size={14} />
               <span>speaking…</span>
+            </span>
+          )}
+          {!continuousActive && wakeArmed && (
+            <span
+              className="flex items-center gap-1 text-ember-700/80"
+              title="Say 'Xiexie' to start a conversation. Say 'thank you' to end it."
+            >
+              <span className="relative inline-flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-ember-400 opacity-60" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-ember-500" />
+              </span>
+              <span className="text-xs">listening for &ldquo;Xiexie&rdquo;…</span>
             </span>
           )}
           <div className="flex items-center gap-2">

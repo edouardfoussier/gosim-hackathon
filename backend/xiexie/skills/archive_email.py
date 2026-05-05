@@ -1,7 +1,9 @@
-"""archive_email — mark a message as archived in the demo inbox.
+"""archive_email — move a single message out of the inbox.
 
-For V1 we mutate the JSON fixture (so demo state is reproducible). The
-real Mail.app variant is a one-line AppleScript swap when we wire it.
+Source-agnostic: ``_inbox.update_message`` dispatches to the configured
+``MAIL_SOURCE`` (``mailapp`` → AppleScript ``move ... to mailbox "Archive"``;
+``demo`` → JSON fixture mutation), so the same skill body covers both
+the deterministic stage demo and the real Mail.app run-through.
 """
 
 from __future__ import annotations
@@ -17,6 +19,9 @@ def run(args: dict[str, Any]) -> str:
     if not message_id:
         return "Which email should I archive? I need its id."
 
+    # Works for both sources: the JSON fixture mutates in place, the
+    # Mail.app router translates ``archived=True`` into a real
+    # AppleScript move-to-Archive (and ignores ``read=True`` for safety).
     msg = _inbox.update_message(message_id, archived=True, read=True)
     if msg is None:
         return f"I couldn't find an email with id {message_id!r}."

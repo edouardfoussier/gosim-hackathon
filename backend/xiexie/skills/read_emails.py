@@ -1,4 +1,10 @@
-"""read_emails — list recent unread emails (V1 reads from the demo inbox).
+"""read_emails — list recent unread emails.
+
+Reads from either the user's real macOS Mail.app inbox (default) or the
+deterministic ``data/demo/inbox.json`` fixture, selected by the
+``MAIL_SOURCE`` env var. The source switch happens inside ``_inbox`` so
+this skill stays oblivious — it just gets a list of dicts in the canonical
+shape (see ``_mail_app._parse_record`` / ``data/demo/inbox.json``).
 
 Returns a short plain-English summary the planner can either speak directly
 or pipe into ``analyze_email`` if anything looks suspicious.
@@ -231,9 +237,10 @@ SKILL = register(
     Skill(
         name="read_emails",
         description=(
-            "List recent unread emails with a short summary. Flags any message that looks "
-            "suspicious based on cheap header + sender + subject heuristics so the planner "
-            "can offer to run `analyze_email` on it."
+            "List recent unread emails with a short summary. Reads from the user's "
+            "Mail.app inbox (default) or a built-in demo fixture (set MAIL_SOURCE=demo). "
+            "Flags any message that looks suspicious based on cheap header + sender + "
+            "subject heuristics so the planner can offer to run `analyze_email` on it."
         ),
         parameters={
             "type": "object",
