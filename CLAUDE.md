@@ -286,8 +286,24 @@ System Settings → Privacy & Security:
 - [ ] Accessibility → Terminal + Cursor (for pyautogui keyboard)
 - [ ] **Input Monitoring** → Terminal + Cursor (for the ctrl+option PTT tap)
 - [ ] Automation → Terminal → System Events, Mail, Reminders, Calendar, Chrome
-- [ ] Screen Recording → Terminal + Cursor (if vision agent reads desktop)
+- [ ] **Screen Recording → Terminal (CRITICAL for `read_screen`)**
 - [ ] Full Disk Access → Terminal (mdfind across `~/Documents/` etc.)
+
+> ⚠️ **Sequoia gotcha (2026-05-05 incident)**: without Screen Recording
+> permission, every macOS capture API silently returns the **wallpaper
+> only**, not the actual screen content. `mss` and `screencapture -x`
+> succeed but yield "scenic lake" pixels — GLM-4.5V then truthfully
+> reports it can't see any email/page. Symptom: every `read_screen`
+> reply mentions wallpaper imagery.
+>
+> **Verify perm is granted**:
+> ```bash
+> screencapture -x -t jpg /tmp/perm-check.jpg && file /tmp/perm-check.jpg
+> # MUST show JPEG ... 5120x2880 (Retina) or 3840x2160 etc.
+> # If "could not create image from display" → grant perm + Cmd+Q Terminal + reopen.
+> ```
+> The permission only takes effect for **freshly launched** Terminal
+> processes — Cmd+Q the whole app, don't just close the window.
 
 Wake-word setup (optional but recommended for demo):
 - [ ] Set `PICOVOICE_ACCESS_KEY` in `.env` (free at https://console.picovoice.ai)

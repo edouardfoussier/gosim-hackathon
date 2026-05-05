@@ -135,8 +135,14 @@ class LLMProvider:
         return LLMResponse(text=text, tool_calls=tool_calls, raw=resp)
 
     # ── vision (screenshot reading) ───────────────────────────────────────
-    def see(self, image_b64: str, prompt: str) -> str:
-        """Send a screenshot (base64 PNG) + text prompt; return plain text.
+    def see(self, image_b64: str, prompt: str, *, mime: str = "image/jpeg") -> str:
+        """Send a screenshot (base64) + text prompt; return plain text.
+
+        ``mime`` defaults to ``image/jpeg`` because Retina full-screen PNGs
+        easily exceed the vision endpoint's payload ceiling and come back
+        empty. JPEG at quality 85 is ~10× smaller for visually identical
+        screen content. Pass ``mime="image/png"`` only when transparency
+        actually matters.
 
         Raises ``RuntimeError`` if the configured provider has no vision
         model (e.g. the GOSIM proxy currently exposes text-only models).
@@ -146,23 +152,36 @@ class LLMProvider:
                 "No vision model configured for this provider — set "
                 "ZAI_VISION_MODEL or switch base_url to direct Z.AI."
             )
-        resp = self.client.chat.completions.create(
-            model=self.vision_model,
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": prompt},
-                        {
-                            "type": "image_url",
-                            "image_url": {"url": f"data:image/png;base64,{image_b64}"},
-                        },
-                    ],
-                }
-            ],
-            max_tokens=512,
-        )
-        return resp.choices[0].message.content or ""
+        try:
+            resp = self.client.chat.completions.create(
+                model=self.vision_model,
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": prompt},
+                            {
+                                "type": "image_url",
+                                "image_url": {"url": f"data:{mime};base64,{image_b64}"},
+                            },
+                        ],
+                    }
+                ],
+                max_tokens=1024,
+            )
+        except Exception as exc:  # noqa: BLE001
+            # Surface the underlying error so the skill can log a clear
+            # diagnostic — silent empty replies were impossible to debug.
+            print(f"[provider.see] vision call failed: {exc}", flush=True)
+            raise
+        text = resp.choices[0].message.content or ""
+        if not text.strip():
+            print(
+                "[provider.see] empty reply — finish_reason="
+                f"{resp.choices[0].finish_reason!r} usage={resp.usage}",
+                flush=True,
+            )
+        return text
 
 
 # ── factory ───────────────────────────────────────────────────────────────
