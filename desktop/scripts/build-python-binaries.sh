@@ -93,9 +93,15 @@ build_backend() {
 
 build_overlay() {
   echo "[python] ── building xiexie-overlay ──────────────────────────"
-  cd "$OVERLAY_DIR"
+  # PyInstaller has to import the ``overlay`` package by name, which
+  # means ``overlay/`` must look like a sub-directory of the cwd — not
+  # the cwd itself. Run from the repo root and pass --paths so the
+  # static analyser finds ``overlay.glyph`` / ``overlay.ws_client`` /
+  # ``overlay.ns_panel`` cleanly.
+  cd "$REPO_ROOT"
 
-  rm -rf build dist xiexie-overlay.spec
+  rm -rf "$OVERLAY_DIR/build" "$OVERLAY_DIR/dist" "$OVERLAY_DIR/xiexie-overlay.spec"
+  rm -rf "$REPO_ROOT/build/xiexie-overlay" "$REPO_ROOT/dist/xiexie-overlay"
   rm -rf "$BINARIES_DIR/xiexie-overlay"
 
   "${PY_CMD[@]}" \
@@ -103,6 +109,7 @@ build_overlay() {
     --name xiexie-overlay \
     --noconfirm \
     --noconsole \
+    --paths "$REPO_ROOT" \
     --collect-submodules overlay \
     --collect-data overlay \
     --collect-submodules PyQt6 \
