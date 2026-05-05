@@ -1,19 +1,25 @@
 """Background WebSocket client that bridges Xiexie backend → Qt signals.
 
 Connects to ``ws://localhost:8787/ws`` (the same endpoint the Next.js app
-uses) and forwards messages of shape::
+uses) and forwards two event types into Qt signals so the overlay can
+react from the main thread:
 
-    {"type": "alert", "level": "phishing"|"suspicious"|"clear", "message": "..."}
-
-into a Qt signal that the overlay can react to from the main thread.
+- :pyattr:`alert` — payload ``(level: str, message: str, raw: dict)``,
+  triggered by ``{"type": "alert", "level": "phishing"|"suspicious"|"clear",
+  "message": "..."}``. Drives :class:`overlay.glyph.GlyphOverlay`.
+- :pyattr:`speaking` — payload ``(state: str, level: float | None, raw: dict)``,
+  triggered by ``{"type": "speaking", "state": "start"|"stop", "level": 0..1 | null}``.
+  Drives :class:`overlay.soundwave.SoundwaveOverlay`.
 
 Other message types from the backend (``transcript``, ``speak``,
-``skill_*``, ``done``, ``confirm``) are silently ignored — this client
-is alert-only by design.
+``skill_*``, ``done``, ``confirm``) are silently ignored — this bridge
+is overlay-events-only by design.
 
 If the backend isn't reachable, the worker silently retries with
-exponential backoff. The overlay's CLI test path (:mod:`overlay.demo`
-``--level phishing``) does not depend on this client and works offline.
+exponential backoff. The overlay's CLI test paths
+(:mod:`overlay.demo` ``--level phishing`` and
+:mod:`overlay.soundwave` ``--procedural``) do not depend on this client
+and work offline.
 """
 
 from __future__ import annotations
@@ -35,12 +41,22 @@ DEFAULT_URL = "ws://localhost:8787/ws"
 
 
 class WsBridge(QObject):
-    """QObject that emits :pyattr:`alert` whenever the backend ships an alert.
+    """QObject that emits Qt signals for the two overlay event types.
 
-    Signal payload: ``(level: str, message: str, raw: dict)``.
+    Signals:
+
+    - :pyattr:`alert` — ``(level: str, message: str, raw: dict)`` for
+      ``{"type": "alert", ...}`` frames.
+    - :pyattr:`speaking` — ``(state: str, level: float | None, raw: dict)``
+      for ``{"type": "speaking", ...}`` frames. ``level`` is ``None``
+      when the backend payload omitted the field (procedural fallback).
     """
 
     alert = pyqtSignal(str, str, dict)
+    # PyQt6 cannot pass ``None`` through a typed ``float`` slot; use the
+    # generic ``object`` slot so the receiver can branch on
+    # ``isinstance(level, float)`` cleanly.
+    speaking = pyqtSignal(str, object, dict)
     connected = pyqtSignal(bool)
 
     def __init__(self, url: str = DEFAULT_URL, parent: QObject | None = None) -> None:
@@ -99,10 +115,34 @@ class WsBridge(QObject):
             return
         if not isinstance(payload, dict):
             return
-        if payload.get("type") != "alert":
+
+        kind = payload.get("type")
+        if kind == "alert":
+            level = str(payload.get("level", "")).strip().lower()
+            if level not in {"phishing", "suspicious", "clear"}:
+                return
+            message = str(payload.get("message", ""))
+            self.alert.emit(level, message, payload)
             return
-        level = str(payload.get("level", "")).strip().lower()
-        if level not in {"phishing", "suspicious", "clear"}:
+
+        if kind == "speaking":
+            state = str(payload.get("state", "")).strip().lower()
+            if state not in {"start", "stop"}:
+                return
+            raw_level = payload.get("level")
+            level: float | None
+            if raw_level is None:
+                level = None
+            else:
+                try:
+                    level = float(raw_level)
+                except (TypeError, ValueError):
+                    level = None
+                else:
+                    if level != level or level in (float("inf"), float("-inf")):
+                        # NaN / inf — drop the amplitude, keep the state.
+                        level = None
+                    else:
+                        level = max(0.0, min(1.0, level))
+            self.speaking.emit(state, level, payload)
             return
-        message = str(payload.get("message", ""))
-        self.alert.emit(level, message, payload)
