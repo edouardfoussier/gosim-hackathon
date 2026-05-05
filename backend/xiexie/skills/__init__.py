@@ -14,6 +14,7 @@ from . import report_to_family  # noqa: F401
 from . import open_app  # noqa: F401
 from . import find_file  # noqa: F401
 from . import set_reminder  # noqa: F401
+from . import read_screen  # noqa: F401
 
 # Stubs (kept on-brand; logged to unhandled_asks.md)
 from . import _stubs  # noqa: F401  # zoom_text / login_site / daily_brief
