@@ -64,7 +64,104 @@ _LAST_FOLLOWUP_LOCK = threading.Lock()
 _LAST_FOLLOWUP: dict[str, Any] | None = None
 
 
-def _stash_verdict(message_id: str | None, verdict: dict[str, Any]) -> None:
+def _build_url_sandbox(
+    message: dict[str, Any] | None, verdict: dict[str, Any]
+) -> dict[str, Any] | None:
+    """Derive the ``UrlSandboxData`` blob the VerdictCard renders.
+
+    Pulls from ``verdict["_evidence"]["url_reports"][0]`` (set by
+    ``analyze``) and the matching link in the original ``message``, so
+    the panel shows Margaret what's *behind* the suspicious link
+    without her clicking it. Returns None when nothing actionable
+    survives — e.g. no links in the email, or the URL report blew up
+    in-flight (``error`` key set by ``check_url._real_fetch``).
+    """
+    evidence = verdict.get("_evidence") or {}
+    reports = evidence.get("url_reports") or []
+    if not reports:
+        return None
+    report = reports[0]
+    if not isinstance(report, dict) or report.get("error"):
+        return None
+
+    visible_text: str | None = None
+    if message:
+        for link in (message.get("links") or [])[:5]:
+            if isinstance(link, dict) and link.get("url") == report.get("url"):
+                visible_text = (link.get("text") or "").strip() or None
+                break
+
+    final_url = report.get("final_url") or report.get("url") or ""
+    if not final_url:
+        return None
+
+    # Hostname-only "domain" for the headline display. ``urlparse`` is
+    # tolerant of malformed urls — fall back to the raw URL if the
+    # parser hands us nothing.
+    from urllib.parse import urlparse
+
+    parsed = urlparse(final_url)
+    final_domain = (parsed.hostname or final_url).lower()
+
+    # Redirect chain → list of domain strings (most-recent first kept,
+    # plus a final entry pointing at the landing page). The card
+    # renders 3 entries best, so we cap at 4 keeping start + end.
+    chain: list[str] = []
+    for hop in report.get("redirect_chain") or []:
+        if not isinstance(hop, dict):
+            continue
+        url = hop.get("url") or ""
+        host = urlparse(url).hostname or url
+        if host and host not in chain:
+            chain.append(host)
+    if final_domain and final_domain not in chain:
+        chain.append(final_domain)
+    if len(chain) > 4:
+        chain = [chain[0], "…", chain[-2], chain[-1]]
+
+    sandbox: dict[str, Any] = {
+        "visibleText": visible_text or "the link",
+        "finalDomain": final_domain,
+        "finalUrl": final_url,
+    }
+    if len(chain) > 1:
+        sandbox["redirectChain"] = chain
+
+    age = report.get("domain_registered_days_ago")
+    if isinstance(age, int) and age >= 0:
+        sandbox["domainAgeDays"] = age
+
+    # ``verdict_features`` is the place check_url logs hosting / GSB /
+    # urlscan signals. We surface the first one that smells like a
+    # hosting note so the card has a one-line tagline below the
+    # domain.
+    features = report.get("verdict_features") or []
+    hosting_keywords = ("hosted", "registered", "free", "bulk", "fail", "flagged")
+    for feat in features:
+        text = str(feat).strip()
+        if not text:
+            continue
+        lc = text.lower()
+        if any(kw in lc for kw in hosting_keywords) and len(text) <= 140:
+            sandbox["hostingNote"] = text
+            break
+
+    # Future Playwright capture lives at
+    # ``data/captures/<message_id>.png``; we don't render anything if
+    # the caller hasn't pre-rendered one.
+    screenshot = report.get("screenshot_url")
+    if isinstance(screenshot, str) and screenshot.strip():
+        sandbox["screenshotUrl"] = screenshot.strip()
+
+    return sandbox
+
+
+def _stash_verdict(
+    message_id: str | None,
+    verdict: dict[str, Any],
+    *,
+    message: dict[str, Any] | None = None,
+) -> None:
     payload = {
         "message_id": message_id,
         "verdict": verdict.get("verdict"),
@@ -72,6 +169,9 @@ def _stash_verdict(message_id: str | None, verdict: dict[str, Any]) -> None:
         "signs": list(verdict.get("signs") or []),
         "speak_aloud": verdict.get("speak_aloud"),
     }
+    sandbox = _build_url_sandbox(message, verdict)
+    if sandbox is not None:
+        payload["url_sandbox"] = sandbox
     with _LAST_VERDICT_LOCK:
         _LAST_VERDICTS.append(payload)
         # Drop the oldest entries if a sloppy caller never pops.
@@ -755,7 +855,9 @@ def run(args: dict[str, Any]) -> str:
     # Hand the verdict to the WS bridge so the overlay can light up
     # automatically when the analysis returns. ``pop_last_verdict`` is
     # consumed inside the ``/ws`` endpoint right after this skill returns.
-    _stash_verdict(message_id, verdict)
+    # Pass ``message`` so the sandbox blob can find the visible link
+    # text Margaret saw before she asked Xiexie about it.
+    _stash_verdict(message_id, verdict, message=message)
 
     # Stash the chained follow-up in its own slot so the planner can pick
     # it up when the user answers the ``confirm`` bubble with "yes". A

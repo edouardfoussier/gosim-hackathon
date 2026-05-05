@@ -14,6 +14,18 @@ export type ServerEvent =
       // mid-flight upgrade doesn't break any deployed Chrome extension.
       level?: "phishing" | "suspicious" | "clear" | "warning" | "danger";
       message: string;
+      // Pre-cooked link forensics built by analyze_email + check_url —
+      // shape mirrors UrlSandboxData in @/components/url-sandbox-preview.
+      // Only populated when there's an actionable link to sandbox.
+      url_sandbox?: {
+        visibleText: string;
+        finalDomain: string;
+        finalUrl?: string;
+        redirectChain?: string[];
+        domainAgeDays?: number;
+        hostingNote?: string;
+        screenshotUrl?: string;
+      };
     }
   // Mirrors the backend's bus.broadcast_speaking — the frontend echoes
   // its own gpt-realtime audio levels here, but listening to the WS lets

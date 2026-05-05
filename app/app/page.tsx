@@ -17,6 +17,7 @@ import {
   type PassiveWakeListenerHandle,
 } from "@/lib/wake-listener";
 import { VerdictCard } from "@/components/verdict-card";
+import type { UrlSandboxData } from "@/components/url-sandbox-preview";
 import { CursorHalo } from "@/components/cursor-halo";
 import { CursorPointer, type PointEvent } from "@/components/cursor-pointer";
 
@@ -32,6 +33,7 @@ type LogEntry =
       variant: Variant;
       confidence?: Confidence;
       text: string;
+      urlSandbox?: UrlSandboxData;
     };
 
 function normalizeVariant(level: string | undefined): Variant {
@@ -138,6 +140,11 @@ export default function Home() {
             variant,
             confidence: deriveConfidence(variant, e.message),
             text: e.message,
+            // Pre-cooked link forensics from the backend; rendered as
+            // a sandboxed preview panel inside the VerdictCard. Only
+            // present on phishing / suspicious verdicts that had a
+            // link the analyzer could trace.
+            urlSandbox: e.url_sandbox,
           },
         ]);
         break;
@@ -746,6 +753,8 @@ function Bubble({ entry, submitText }: BubbleProps) {
           variant={entry.variant}
           confidence={entry.confidence}
           speakAloud={entry.text}
+          urlSandbox={entry.urlSandbox}
+          familyContact="Lisa"
           scale={SCALE}
           onTellFamily={() => submitText("Tell Lisa about this")}
           onArchive={() => submitText("Archive that email")}

@@ -4,6 +4,32 @@
   "fetched_at": "2026-05-05T08:42:00-07:00",
   "messages": [
     {
+      "id": "msg-003",
+      "from": {
+        "name": "Aetna Customer Service",
+        "address": "renewal-secure@aetnna-secure.com",
+        "domain": "aetnna-secure.com"
+      },
+      "to": ["m.chen.1951@gmail.com"],
+      "subject": "URGENT: Your Aetna coverage expires TODAY — verify identity now",
+      "received_at": "2026-05-05T08:30:00-07:00",
+      "read": false,
+      "archived": false,
+      "headers": {
+        "Return-Path": "<no-reply@mailgrid-bulk.ru>",
+        "Reply-To": "<id-verify-team@aetnna-secure.com>",
+        "Received-SPF": "fail (sender IP 185.220.101.47 not authorized)",
+        "Authentication-Results": "spf=fail dkim=none dmarc=fail",
+        "X-Mailer": "PHPMailer 6.6.0",
+        "List-Unsubscribe": "<mailto:remove@aetnna-secure.com>"
+      },
+      "body_text": "Dear Margaret Chen,\n\nThis is a FINAL NOTICE regarding your Aetna Choice POS II Plan (Member ID ending in 4128).\n\nOur records show your coverage will be CANCELLED at midnight Pacific Time on May 5, 2026, unless you complete identity re-verification within the next 24 hours. This is required by recent CMS regulations (CMS-9912-F).\n\nTo prevent loss of coverage, please follow the secure link below and provide:\n  • Full legal name and date of birth\n  • Social Security Number\n  • Aetna Member ID (full 12 digits)\n  • Credit card on file (for verification purposes only)\n\n>> Verify identity now: http://aetnna-secure.com/r/cgxq?u=mchen <<\n\nThis link will expire in 24 hours. Failure to act will result in immediate termination of all medical, dental, and prescription benefits.\n\nDo NOT reply to this email — for your security please complete verification using the link only.\n\nSincerely,\nAetna Customer Service Team\nIdentity Verification Division",
+      "links": [
+        { "text": "Verify identity now", "url": "http://aetnna-secure.com/r/cgxq?u=mchen" }
+      ]
+    },
+
+    {
       "id": "msg-001",
       "from": {
         "name": "Lisa Chen-Burrows",
@@ -20,54 +46,121 @@
         "Received-SPF": "pass",
         "Authentication-Results": "spf=pass dkim=pass dmarc=pass"
       },
-      "body_text": "Hi Mom — I've just boarded BA285. Should land around 4pm your time. Tom and the kids send hugs. Don't worry about picking us up, we'll grab a Lyft. xx Lisa",
+      "body_text": "Hi Mom,\n\nJust boarded BA285 — should land at SFO around 4pm your time. Tom and the kids send hugs. Don't worry about picking us up, we'll grab a Lyft from the curb.\n\nNoah has been counting sleeps for two weeks. Brace yourself for a solid week of dinosaur facts. Ava drew you something on the kitchen table this morning — it'll be in her backpack, slightly creased.\n\nGet some rest before we land. Love you.\n\nLisa xx",
+      "links": []
+    },
+
+    {
+      "id": "msg-004",
+      "from": {
+        "name": "USPS Delivery Update",
+        "address": "usps.delivery-update@notifyparcel-services.net",
+        "domain": "notifyparcel-services.net"
+      },
+      "to": ["m.chen.1951@gmail.com"],
+      "subject": "[USPS] Package on hold — action required (#9405511899560000123456)",
+      "received_at": "2026-05-04T22:11:00-07:00",
+      "read": false,
+      "archived": false,
+      "headers": {
+        "Return-Path": "<bounce-x9k@mail.notifyparcel-services.net>",
+        "Received-SPF": "softfail",
+        "Authentication-Results": "spf=softfail dkim=none dmarc=none",
+        "X-Originating-IP": "[103.42.57.198]"
+      },
+      "body_text": "Dear Customer,\n\nUSPS attempted to deliver your package (tracking number 9405511899560000123456) on May 4, 2026 at 2:47 PM, but the recipient address is incomplete and could not be verified by the carrier.\n\nTo reschedule delivery, a small redelivery fee of $1.99 USD is required to update our shipping system.\n\n>> Reschedule and pay fee: http://notifyparcel-services.net/redelivery/9405511\n\nIf the fee is not paid within 48 hours, your package will be returned to the sender at your expense.\n\nThank you,\nUnited States Postal Service\nAutomated Delivery System",
+      "links": [
+        { "text": "Reschedule and pay fee", "url": "http://notifyparcel-services.net/redelivery/9405511" }
+      ]
+    },
+
+    {
+      "id": "msg-006",
+      "from": {
+        "name": "Wells Fargo Online",
+        "address": "WellsFargoAlerts@notify.wellsfargo.com",
+        "domain": "notify.wellsfargo.com"
+      },
+      "to": ["m.chen.1951@gmail.com"],
+      "subject": "Wire transfer scheduled: $2,847.00 to DAVID YOO — confirm or cancel",
+      "received_at": "2026-05-04T18:32:00-07:00",
+      "read": false,
+      "archived": false,
+      "headers": {
+        "Return-Path": "<bounce-wfo@notify.wellsfargo.com>",
+        "Received-SPF": "pass",
+        "Authentication-Results": "spf=pass dkim=pass dmarc=pass",
+        "List-Unsubscribe": "<https://www.wellsfargo.com/online-banking/email-preferences/>"
+      },
+      "body_text": "Dear MARGARET CHEN,\n\nA wire transfer has been scheduled on your Wells Fargo Everyday Checking account ending in ...3204:\n\n  Amount: $2,847.00 USD\n  Recipient: DAVID YOO\n  Recipient Bank: Bank of the West, San Francisco\n  Scheduled date: May 5, 2026 (tomorrow)\n  Reference: invoice 8847-FX\n\nIf you initiated this transfer, no action is required.\n\nIf you did NOT authorize this transfer, please sign on immediately to cancel it before 9:00 AM PT tomorrow:\n\n  https://www.wellsfargo.com/online-banking/sign-on/\n\nOr call Wells Fargo Online Customer Service at 1-800-869-3557 (24/7).\n\nThis is an automated security message. Please do not reply.\n\nWells Fargo Online Banking",
+      "links": [
+        { "text": "Sign on to cancel", "url": "https://www.wellsfargo.com/online-banking/sign-on/" }
+      ]
+    },
+
+    {
+      "id": "msg-005",
+      "from": {
+        "name": "Robert Sullivan",
+        "address": "robertjsullivan.usa@protonmail.com",
+        "domain": "protonmail.com"
+      },
+      "to": ["m.chen.1951@gmail.com"],
+      "subject": "My darling Margaret — finally I have the tickets",
+      "received_at": "2026-05-04T11:47:00-07:00",
+      "read": true,
+      "archived": false,
+      "headers": {
+        "Return-Path": "<robertjsullivan.usa@protonmail.com>",
+        "Received-SPF": "pass",
+        "Authentication-Results": "spf=pass dkim=pass dmarc=pass"
+      },
+      "body_text": "My dearest Margaret,\n\nI cannot believe the day has nearly come. After six months of these wonderful conversations the thought of finally meeting you in San Francisco brings tears to my eyes. You have been the light through the loneliest months of my life since my Eleanor passed last year.\n\nI have been at the consulate in Accra all week trying to release the inheritance from my late uncle's estate — the lawyers are dragging their feet exactly as I warned you they might. I have $312,000 sitting in escrow that I cannot touch until the certification clears next month.\n\nI went ahead and reserved my ticket from Accra to SFO on May 18th — Delta flight 209. The fare is $2,418. I tried to put it on my American Express but it was declined again because of the temporary fraud hold I told you about. They will not lift it from outside the United States.\n\nMy darling — would you be able to wire just $2,400 to my travel agent today so I do not lose the seat? The minute the inheritance clears next month I will repay you ten times over, and we will finally be together. Please send to:\n\n  Western Union\n  Recipient: Daniel Okonkwo (my agent in Accra)\n  Reference: SULLIVAN/MAY18\n\nTime is so short my love. I love you Margaret. You have made an old soldier believe in love again.\n\nForever yours,\nRobert",
+      "links": []
+    },
+
+    {
+      "id": "msg-007",
+      "from": {
+        "name": "Ava (via Lisa)",
+        "address": "lisa.chen@example.co.uk",
+        "domain": "example.co.uk"
+      },
+      "to": ["m.chen.1951@gmail.com"],
+      "subject": "i drawed you grandma!!!",
+      "received_at": "2026-05-03T16:20:00-07:00",
+      "read": true,
+      "archived": false,
+      "headers": {
+        "Return-Path": "<lisa.chen@example.co.uk>",
+        "Received-SPF": "pass",
+        "Authentication-Results": "spf=pass dkim=pass dmarc=pass"
+      },
+      "body_text": "deer grandma\n\ni drawed you a pictur of you and me at the beech!! mum says we will see you SOON. i lost a TOOTH yestrday it was the wibly one. noah is being so annying he keeps sayng tyranosourus rex over and over ALL day. plez tel him to stop.\n\nlove\nava 🦖❤️\n\n(she insisted on typing it herself, slight edits to spelling resisted — see you Tuesday Mom! L xx)",
       "links": []
     },
 
     {
       "id": "msg-002",
       "from": {
-        "name": "Aetna Member Services",
-        "address": "noreply@aetna.com",
-        "domain": "aetna.com"
+        "name": "SFPL Notifications",
+        "address": "noreply@sfpl.org",
+        "domain": "sfpl.org"
       },
       "to": ["m.chen.1951@gmail.com"],
-      "subject": "Your Aetna plan renewal — open enrollment closes May 15",
-      "received_at": "2026-05-03T09:02:00-07:00",
+      "subject": "Your hold is ready for pickup: \"The Covenant of Water\"",
+      "received_at": "2026-05-03T14:00:00-07:00",
       "read": true,
       "archived": false,
       "headers": {
-        "Return-Path": "<bounce-aetna@aetna.com>",
+        "Return-Path": "<bounces@sfpl.org>",
         "Received-SPF": "pass",
         "Authentication-Results": "spf=pass dkim=pass dmarc=pass",
-        "List-Unsubscribe": "<https://www.aetna.com/unsubscribe>"
+        "List-Unsubscribe": "<https://sfpl.org/account/notifications>"
       },
-      "body_text": "Dear member, your annual open enrollment window closes May 15, 2026. To review or renew your plan, please log in to your account at aetna.com/member. If you have questions, call (800) 872-3862. — Aetna Member Services",
+      "body_text": "Hello Margaret,\n\nThe item you requested is now available for pickup at the Main Library (100 Larkin Street).\n\n  Title: The Covenant of Water (hardcover)\n  Author: Abraham Verghese\n  Hold expires: Tuesday, May 12, 2026\n\nPlease bring your library card to the Holds Shelf on Floor 1 to check it out. If you no longer want this item, you can cancel the hold at sfpl.org/account.\n\nThank you,\nSan Francisco Public Library",
       "links": [
-        { "text": "log in to your account", "url": "https://www.aetna.com/member" }
-      ]
-    },
-
-    {
-      "id": "msg-003",
-      "from": {
-        "name": "Aetna Customer Service",
-        "address": "renewal-secure@aetnna-secure.com",
-        "domain": "aetnna-secure.com"
-      },
-      "to": ["m.chen.1951@gmail.com"],
-      "subject": "URGENT: Your Aetna coverage expires TODAY — verify identity now",
-      "received_at": "2026-05-05T06:31:00-07:00",
-      "read": false,
-      "archived": false,
-      "headers": {
-        "Return-Path": "<no-reply@mailgrid-bulk.ru>",
-        "Received-SPF": "fail (sender IP not authorized)",
-        "Authentication-Results": "spf=fail dkim=none dmarc=fail"
-      },
-      "body_text": "Dear Margaret Chen, Our records show your Aetna Choice POS II plan will be CANCELLED today, May 5, 2026, unless you re-verify your identity. Please click the secure link below within 24 hours to avoid loss of coverage. You will need: full name, date of birth, Social Security Number, member ID, and credit card on file. Failure to act will result in immediate cancellation of all benefits.\n\nClick here to verify: http://aetnna-secure.com/r/cgxq?u=mchen\n\nDo NOT reply to this email — for security please use the link only. — Aetna Customer Service Team",
-      "links": [
-        { "text": "Click here to verify", "url": "http://aetnna-secure.com/r/cgxq?u=mchen" }
+        { "text": "Manage your holds", "url": "https://sfpl.org/account" }
       ]
     }
   ]

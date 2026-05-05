@@ -36,13 +36,32 @@ from xiexie.skills import read_screen  # noqa: E402
 
 _FAKE_B64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg=="
 
+# ``_capture_screen`` now returns ``(b64, source_label, CaptureGeometry)``
+# — see backend/xiexie/skills/read_screen.py for the dataclass. We build
+# a minimal pointable geometry so the prompt assembly path doesn't choke
+# on missing fields.
+_FAKE_GEO = read_screen.CaptureGeometry(
+    image_w=1600,
+    image_h=1000,
+    source_x=0,
+    source_y=0,
+    source_w=1600,
+    source_h=1000,
+    pointable=True,
+)
+_FAKE_CAPTURE: tuple[str, str, read_screen.CaptureGeometry] = (
+    _FAKE_B64,
+    "test capture",
+    _FAKE_GEO,
+)
+
 
 def test_calls_see_with_image_and_prefs() -> None:
     fake_llm = mock.MagicMock()
     fake_llm.see.return_value = "It says 'Welcome to Mail.app'. Repeat: 'Welcome to Mail.app'."
 
     with (
-        mock.patch.object(read_screen, "_capture_screen", return_value=_FAKE_B64),
+        mock.patch.object(read_screen, "_capture_screen", return_value=_FAKE_CAPTURE),
         mock.patch.object(read_screen, "get_provider", return_value=fake_llm),
     ):
         out = read_screen.run({"question": "What does this email say?"})
@@ -67,34 +86,41 @@ def test_calls_see_with_image_and_prefs() -> None:
     print("ok calls_see_with_image_and_prefs")
 
 
-def test_active_window_scope_is_default() -> None:
+def test_full_scope_is_default() -> None:
+    """Default scope flipped from active_window → full in the cursor-pointing
+    refactor — full primary monitor is what Margaret actually wants
+    (Mail.app is rarely the front-most window when she's in the chat)."""
     fake_llm = mock.MagicMock()
     fake_llm.see.return_value = "Headline reads: 'Markets close higher.'"
 
     with (
         mock.patch.object(
-            read_screen, "_capture_screen", return_value=_FAKE_B64
+            read_screen, "_capture_screen", return_value=_FAKE_CAPTURE
         ) as cap_mock,
         mock.patch.object(read_screen, "get_provider", return_value=fake_llm),
     ):
         read_screen.run({"question": "Read the headline."})
-        cap_mock.assert_called_once_with("active_window")
-    print("ok active_window_scope_is_default")
+        cap_mock.assert_called_once_with("full", None)
+    print("ok full_scope_is_default")
 
 
-def test_full_scope_is_passed_through() -> None:
+def test_app_argument_is_passed_through() -> None:
+    """When the planner targets a specific app, ``_capture_screen`` gets
+    the app name and the per-window Quartz path runs."""
     fake_llm = mock.MagicMock()
     fake_llm.see.return_value = "Two windows visible."
 
     with (
         mock.patch.object(
-            read_screen, "_capture_screen", return_value=_FAKE_B64
+            read_screen, "_capture_screen", return_value=_FAKE_CAPTURE
         ) as cap_mock,
         mock.patch.object(read_screen, "get_provider", return_value=fake_llm),
     ):
-        read_screen.run({"question": "Describe everything you see.", "scope": "full"})
-        cap_mock.assert_called_once_with("full")
-    print("ok full_scope_is_passed_through")
+        read_screen.run(
+            {"question": "Describe the email.", "app": "Mail"}
+        )
+        cap_mock.assert_called_once_with("full", "Mail")
+    print("ok app_argument_is_passed_through")
 
 
 def test_empty_question_short_circuits() -> None:
@@ -122,16 +148,15 @@ def test_runtime_error_from_see_propagates() -> None:
         "ZAI_VISION_MODEL or switch base_url to direct Z.AI."
     )
     with (
-        mock.patch.object(read_screen, "_capture_screen", return_value=_FAKE_B64),
+        mock.patch.object(read_screen, "_capture_screen", return_value=_FAKE_CAPTURE),
         mock.patch.object(read_screen, "get_provider", return_value=fake_llm),
     ):
-        try:
-            read_screen.run({"question": "What's on screen?"})
-        except RuntimeError as exc:
-            assert "ZAI_VISION_MODEL" in str(exc), exc
-            print("ok runtime_error_from_see_propagates")
-            return
-    raise AssertionError("expected RuntimeError to propagate")
+        out = read_screen.run({"question": "What's on screen?"})
+    # The skill now catches RuntimeError and returns a Margaret-friendly
+    # spoken sentence — see the ``except RuntimeError`` branch in
+    # read_screen.run. The planner's fallback no longer needs to.
+    assert "vision" in out.lower() or "screen" in out.lower(), out
+    print("ok runtime_error_from_see_propagates")
 
 
 def test_skill_is_registered_non_destructive() -> None:
@@ -147,8 +172,8 @@ def test_skill_is_registered_non_destructive() -> None:
 
 def main() -> None:
     test_calls_see_with_image_and_prefs()
-    test_active_window_scope_is_default()
-    test_full_scope_is_passed_through()
+    test_full_scope_is_default()
+    test_app_argument_is_passed_through()
     test_empty_question_short_circuits()
     test_runtime_error_from_see_propagates()
     test_skill_is_registered_non_destructive()

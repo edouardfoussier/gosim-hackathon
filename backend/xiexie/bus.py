@@ -80,14 +80,28 @@ async def _fanout(payload: dict[str, Any]) -> None:
         _active_clients.discard(client)
 
 
-async def broadcast_alert(level: str, message: str) -> None:
+async def broadcast_alert(
+    level: str,
+    message: str,
+    *,
+    url_sandbox: dict[str, Any] | None = None,
+) -> None:
     """Fan out an alert frame to every connected client.
+
+    ``url_sandbox`` is the optional ``UrlSandboxData`` blob the
+    VerdictCard renders inside the card body. Built by
+    ``analyze_email._build_url_sandbox`` from the first ``check_url``
+    report and the email's visible link text — None for verdicts
+    without an actionable link (e.g. clear / safe).
 
     Any client whose ``send_json`` raises is removed from the registry —
     the next iteration stays clean even if the socket layer never told us
     the peer disappeared.
     """
-    await _fanout({"type": "alert", "level": level, "message": message})
+    payload: dict[str, Any] = {"type": "alert", "level": level, "message": message}
+    if url_sandbox:
+        payload["url_sandbox"] = url_sandbox
+    await _fanout(payload)
 
 
 async def broadcast_point(x: int, y: int, label: str | None = None) -> None:
@@ -162,5 +176,6 @@ async def broadcast_verdict_if_any() -> bool:
     signs = stashed.get("signs") or []
     headline = signs[0] if signs else f"verdict: {verdict}"
     message = speak or headline
-    await broadcast_alert(level, message)
+    sandbox = stashed.get("url_sandbox") if isinstance(stashed, dict) else None
+    await broadcast_alert(level, message, url_sandbox=sandbox)
     return True

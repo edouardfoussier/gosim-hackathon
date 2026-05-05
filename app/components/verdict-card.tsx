@@ -1,7 +1,14 @@
 "use client";
 
 import type { CSSProperties, ReactNode } from "react";
+import { Archive, Info, Send, ShieldCheck } from "lucide-react";
 import clsx from "clsx";
+import {
+  UrlSandboxPreview,
+  type UrlSandboxData,
+} from "./url-sandbox-preview";
+
+export type { UrlSandboxData };
 
 // Ported from `Xiexie_claudedesign/verdict.jsx` — three variants
 // (phishing / suspicious / clear) on a 760×980 floating cream card.
@@ -26,6 +33,8 @@ export type VerdictCardProps = {
   confidence?: Confidence;
   signs?: VerdictSign[];
   speakAloud?: string;
+  urlSandbox?: UrlSandboxData;
+  familyContact?: string;
   onTellFamily?: () => void;
   onArchive?: () => void;
   onShowDetails?: () => void;
@@ -100,19 +109,117 @@ const TACTIC_LABEL: Record<string, string> = {
   reciprocity: "reciprocity",
   liking: "liking",
   commitment: "commitment",
+  fear: "fear",
 };
 
-const CONFIDENCE_LABEL: Record<Confidence, string> = {
-  high: "high confidence",
-  medium: "medium confidence",
-  low: "low confidence",
+// Per-Cialdini-family palette. Stays inside the cream/ember world plus the
+// existing phishing/suspicious deep reds. Each entry maps to:
+//   `bg`      — chip background (translucent of `ink`)
+//   `border`  — hairline (slightly stronger translucent of `ink`)
+//   `ink`     — chip text color
+//   `tooltip` — sentence shown on hover (also exposed via `title`).
+type TacticStyle = {
+  bg: string;
+  border: string;
+  ink: string;
+  tooltip: string;
 };
+
+const TACTIC_STYLE: Record<string, TacticStyle> = {
+  // urgency / scarcity → red-orange
+  urgency: {
+    bg: "rgba(212,74,42,0.12)",
+    border: "rgba(212,74,42,0.26)",
+    ink: "#a8331b",
+    tooltip:
+      "This message is rushing you to act fast — that's a classic scam tactic.",
+  },
+  scarcity: {
+    bg: "rgba(212,74,42,0.12)",
+    border: "rgba(212,74,42,0.26)",
+    ink: "#a8331b",
+    tooltip:
+      "It's pretending only a few people get this, so you don't pause to think.",
+  },
+  // authority / fear → deep red
+  authority: {
+    bg: "rgba(138,36,18,0.12)",
+    border: "rgba(138,36,18,0.26)",
+    ink: "#7a1f10",
+    tooltip:
+      "It's leaning on a trusted name (a bank, the IRS, a doctor) so you don't question it.",
+  },
+  fear: {
+    bg: "rgba(138,36,18,0.12)",
+    border: "rgba(138,36,18,0.26)",
+    ink: "#7a1f10",
+    tooltip:
+      "It's frightening you — that's a tactic to make you click before thinking.",
+  },
+  // liking / reciprocity → amber
+  liking: {
+    bg: "rgba(217,122,37,0.14)",
+    border: "rgba(217,122,37,0.28)",
+    ink: "#9b461c",
+    tooltip:
+      "It's being warm or familiar to gain your trust — be careful.",
+  },
+  reciprocity: {
+    bg: "rgba(217,122,37,0.14)",
+    border: "rgba(217,122,37,0.28)",
+    ink: "#9b461c",
+    tooltip:
+      "It's offering you something so you feel obliged to give back — be careful.",
+  },
+  // social-proof / commitment → soft taupe
+  social_proof: {
+    bg: "rgba(94,44,25,0.10)",
+    border: "rgba(94,44,25,0.22)",
+    ink: "#5e2c19",
+    tooltip:
+      "It says 'everyone is doing this' so you don't want to be the odd one out.",
+  },
+  commitment: {
+    bg: "rgba(94,44,25,0.10)",
+    border: "rgba(94,44,25,0.22)",
+    ink: "#5e2c19",
+    tooltip:
+      "It's reminding you of something you said before so you stay consistent — be careful.",
+  },
+};
+
+// Fallback for tactics outside the known set: use the variant tone.
+function tacticStyleFor(tactic: string, tone: Tone): TacticStyle {
+  return (
+    TACTIC_STYLE[tactic] ?? {
+      bg: tone.accentSoft,
+      border: tone.accentLine,
+      ink: tone.accent,
+      tooltip:
+        "Xiexie spotted a persuasion tactic in this message — go slow.",
+    }
+  );
+}
+
+function confidenceLabel(
+  variant: Variant,
+  confidence: Confidence | undefined
+): string | null {
+  if (!confidence) return null;
+  if (variant === "clear" && confidence === "high") return "I'm sure";
+  if (variant === "phishing" && confidence === "high") return "Very confident";
+  if (confidence === "high") return "high confidence";
+  if (confidence === "medium") return "medium confidence";
+  return "low confidence";
+}
 
 export function VerdictCard({
   variant,
   confidence,
   signs,
   speakAloud,
+  urlSandbox,
+  familyContact,
   onTellFamily,
   onArchive,
   onShowDetails,
@@ -142,7 +249,11 @@ export function VerdictCard({
     variant === "clear" ? (
       <ClearCard
         tone={tone}
+        confidence={confidence}
         speakAloud={speakAloud}
+        familyContact={familyContact}
+        onTellFamily={onTellFamily}
+        onArchive={onArchive}
         onShowDetails={onShowDetails}
         cardStyle={cardStyle}
       />
@@ -153,6 +264,8 @@ export function VerdictCard({
         confidence={confidence}
         signs={signs ?? []}
         speakAloud={speakAloud}
+        urlSandbox={urlSandbox}
+        familyContact={familyContact}
         onTellFamily={onTellFamily}
         onArchive={onArchive}
         onShowDetails={onShowDetails}
@@ -178,6 +291,8 @@ type AlertCardProps = {
   confidence?: Confidence;
   signs: VerdictSign[];
   speakAloud?: string;
+  urlSandbox?: UrlSandboxData;
+  familyContact?: string;
   onTellFamily?: () => void;
   onArchive?: () => void;
   onShowDetails?: () => void;
@@ -190,6 +305,8 @@ function AlertCard({
   confidence,
   signs,
   speakAloud,
+  urlSandbox,
+  familyContact,
   onTellFamily,
   onArchive,
   onShowDetails,
@@ -197,33 +314,28 @@ function AlertCard({
 }: AlertCardProps) {
   const headline = speakAloud?.trim() || tone.defaultHeadline;
   const subhead = speakAloud?.trim() ? null : tone.defaultSubhead;
-  const chip = confidence ? CONFIDENCE_LABEL[confidence] : null;
+  const ribbon = confidenceLabel(variant, confidence);
+  const familyName = familyContact?.trim() || "Lisa";
+  const tellFamilyLabel = `Tell ${familyName}`;
 
   // Action ordering follows the source design: phishing leads with
-  // "Tell Lisa", suspicious leads with "Archive".
-  const primary =
-    variant === "phishing"
-      ? {
-          label: "Tell Lisa about this",
-          onClick: onTellFamily,
-        }
-      : {
-          label: "Archive it for me",
-          onClick: onArchive,
-        };
-  const secondary =
-    variant === "phishing"
-      ? {
-          label: "Archive it for me",
-          onClick: onArchive,
-        }
-      : {
-          label: "Tell Lisa about this",
-          onClick: onTellFamily,
-        };
+  // "Tell {family}", suspicious leads with "Archive".
+  const tellAction = {
+    label: tellFamilyLabel,
+    onClick: onTellFamily,
+    icon: <Send size={20} aria-hidden="true" />,
+  };
+  const archiveAction = {
+    label: "Archive it for me",
+    onClick: onArchive,
+    icon: <Archive size={20} aria-hidden="true" />,
+  };
+  const primary = variant === "phishing" ? tellAction : archiveAction;
+  const secondary = variant === "phishing" ? archiveAction : tellAction;
   const tertiary = {
     label: "Show me the technical details",
     onClick: onShowDetails,
+    icon: <Info size={18} aria-hidden="true" />,
   };
 
   return (
@@ -231,15 +343,31 @@ function AlertCard({
       className="flex flex-col overflow-hidden rounded-[28px] bg-[#fbf7f0] text-[#1f1a14]"
       style={cardStyle}
     >
-      <Banner tone={tone} chip={chip} headline={headline} subhead={subhead} />
+      {/* Live region: lets screen readers + browser SpeechSynthesis pick
+          up the verdict spoken line without us having to render it
+          twice. Visible-hidden but assistive-tech-readable. */}
+      {speakAloud && <SrLive text={speakAloud} />}
 
-      <div className="flex flex-1 flex-col gap-4 px-11 pb-4 pt-8">
+      <Banner
+        tone={tone}
+        ribbon={ribbon}
+        ribbonStrong={
+          variant === "phishing" && confidence === "high"
+        }
+        headline={headline}
+        subhead={subhead}
+      />
+
+      <div className="flex flex-1 flex-col gap-4 px-11 pb-4 pt-7 overflow-hidden">
         <div
-          className="mb-1 font-semibold uppercase text-[#1f1a14]/40"
+          className="font-semibold uppercase text-[#1f1a14]/40"
           style={{ fontSize: 13, letterSpacing: "0.18em" }}
         >
           Why I think so
         </div>
+        {urlSandbox && (
+          <UrlSandboxPreview tone={tone} data={urlSandbox} />
+        )}
         {signs.length === 0 ? (
           <EmptySigns tone={tone} />
         ) : (
@@ -252,18 +380,21 @@ function AlertCard({
       <div className="flex flex-col gap-2.5 px-11 pb-9 pt-2">
         <ActionButton
           label={primary.label}
+          icon={primary.icon}
           kind="primary"
           tone={tone}
           onClick={primary.onClick}
         />
         <ActionButton
           label={secondary.label}
+          icon={secondary.icon}
           kind="secondary"
           tone={tone}
           onClick={secondary.onClick}
         />
         <ActionButton
           label={tertiary.label}
+          icon={tertiary.icon}
           kind="ghost"
           tone={tone}
           onClick={tertiary.onClick}
@@ -275,27 +406,49 @@ function AlertCard({
 
 type ClearCardProps = {
   tone: Tone;
+  confidence?: Confidence;
   speakAloud?: string;
+  familyContact?: string;
+  onTellFamily?: () => void;
+  onArchive?: () => void;
   onShowDetails?: () => void;
   cardStyle: CSSProperties;
 };
 
 function ClearCard({
   tone,
+  confidence,
   speakAloud,
+  familyContact,
+  onTellFamily,
+  onArchive,
   onShowDetails,
   cardStyle,
 }: ClearCardProps) {
   const headline = speakAloud?.trim() || tone.defaultHeadline;
   const body =
     "The sender, the links, and the signing checks all match what I'd expect. You can read it without worrying.";
+  const ribbon = confidenceLabel("clear", confidence);
+  const familyName = familyContact?.trim() || "Lisa";
+  // For safe emails we don't push CTAs on Margaret. We only render
+  // them if the parent explicitly wired callbacks (e.g. "tell Lisa
+  // this came through" for sentimental reasons).
+  const showTellFamily = typeof onTellFamily === "function";
+  const showArchive = typeof onArchive === "function";
 
   return (
     <div
       className="flex flex-col justify-between overflow-hidden rounded-[28px] bg-[#fbf7f0] text-[#1f1a14]"
       style={cardStyle}
     >
-      <Banner tone={tone} chip={null} headline={headline} subhead={null} />
+      {speakAloud && <SrLive text={speakAloud} />}
+      <Banner
+        tone={tone}
+        ribbon={ribbon}
+        ribbonStrong={confidence === "high"}
+        headline={headline}
+        subhead={null}
+      />
 
       <div className="flex flex-1 flex-col justify-center gap-6 px-11 py-10">
         <div
@@ -323,16 +476,41 @@ function ClearCard({
               boxShadow: `0 0 0 4px ${tone.accentSoft}`,
             }}
           />
-          <div className="text-[#1f1a14]" style={{ fontSize: 17 }}>
-            From <strong className="font-semibold">Lisa Chen</strong> · Domain
-            check passed · Signing valid
+          <div
+            className="flex items-center gap-2 text-[#1f1a14]"
+            style={{ fontSize: 17 }}
+          >
+            <ShieldCheck size={18} style={{ color: tone.accent }} aria-hidden />
+            <span>
+              From <strong className="font-semibold">Lisa Chen</strong> ·
+              Domain check passed · Signing valid
+            </span>
           </div>
         </div>
       </div>
 
-      <div className="px-11 pb-9">
+      <div className="flex flex-col gap-2.5 px-11 pb-9 pt-2">
+        {showTellFamily && (
+          <ActionButton
+            label={`Tell ${familyName}`}
+            icon={<Send size={20} aria-hidden="true" />}
+            kind="secondary"
+            tone={tone}
+            onClick={onTellFamily}
+          />
+        )}
+        {showArchive && (
+          <ActionButton
+            label="Archive it for me"
+            icon={<Archive size={20} aria-hidden="true" />}
+            kind="secondary"
+            tone={tone}
+            onClick={onArchive}
+          />
+        )}
         <ActionButton
           label="Show me why"
+          icon={<Info size={18} aria-hidden="true" />}
           kind="ghost"
           tone={tone}
           onClick={onShowDetails}
@@ -344,12 +522,13 @@ function ClearCard({
 
 type BannerProps = {
   tone: Tone;
-  chip: string | null;
+  ribbon: string | null;
+  ribbonStrong?: boolean;
   headline: string;
   subhead: string | null;
 };
 
-function Banner({ tone, chip, headline, subhead }: BannerProps) {
+function Banner({ tone, ribbon, ribbonStrong, headline, subhead }: BannerProps) {
   return (
     <div
       className="relative overflow-hidden"
@@ -384,40 +563,35 @@ function Banner({ tone, chip, headline, subhead }: BannerProps) {
         >
           Xiexie has read this email
         </div>
-        {chip && (
-          <div
-            className="rounded-full"
-            style={{
-              fontSize: 13,
-              padding: "6px 14px",
-              background: "rgba(0,0,0,0.18)",
-              backdropFilter: "blur(8px)",
-              color: tone.bannerInk,
-              letterSpacing: "0.04em",
-              border: "0.5px solid rgba(255,255,255,0.18)",
-            }}
-          >
-            {chip}
-          </div>
-        )}
       </div>
 
       <div className="relative mt-6 flex items-start gap-[22px]">
         <BannerGlyph char={tone.glyph} />
         <div className="min-w-0 flex-1">
           <div
-            style={{
-              fontFamily: FRAUNCES,
-              fontSize: 32,
-              fontWeight: 500,
-              letterSpacing: -0.6,
-              lineHeight: 1.05,
-              color: tone.bannerInk,
-              opacity: 0.9,
-              marginBottom: 4,
-            }}
+            className="flex items-center gap-3"
+            style={{ marginBottom: 6 }}
           >
-            {tone.name}
+            <div
+              style={{
+                fontFamily: FRAUNCES,
+                fontSize: 32,
+                fontWeight: 500,
+                letterSpacing: -0.6,
+                lineHeight: 1.05,
+                color: tone.bannerInk,
+                opacity: 0.92,
+              }}
+            >
+              {tone.name}
+            </div>
+            {ribbon && (
+              <ConfidenceRibbon
+                tone={tone}
+                label={ribbon}
+                strong={ribbonStrong}
+              />
+            )}
           </div>
           <div
             style={{
@@ -445,6 +619,43 @@ function Banner({ tone, chip, headline, subhead }: BannerProps) {
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+type ConfidenceRibbonProps = {
+  tone: Tone;
+  label: string;
+  strong?: boolean;
+};
+
+function ConfidenceRibbon({ tone, label, strong }: ConfidenceRibbonProps) {
+  return (
+    <div
+      className="inline-flex items-center gap-1.5 rounded-full"
+      style={{
+        fontSize: 12,
+        padding: strong ? "5px 12px 5px 11px" : "4px 11px 4px 10px",
+        background: strong ? "rgba(0,0,0,0.32)" : "rgba(0,0,0,0.18)",
+        backdropFilter: "blur(8px)",
+        color: tone.bannerInk,
+        letterSpacing: "0.06em",
+        textTransform: "uppercase",
+        fontWeight: strong ? 600 : 500,
+        border: `0.5px solid ${strong ? "rgba(255,255,255,0.32)" : "rgba(255,255,255,0.18)"}`,
+        whiteSpace: "nowrap",
+      }}
+    >
+      <span
+        className="inline-block rounded-full"
+        style={{
+          width: strong ? 7 : 6,
+          height: strong ? 7 : 6,
+          background: tone.bannerInk,
+          opacity: strong ? 0.95 : 0.7,
+        }}
+      />
+      {label}
     </div>
   );
 }
@@ -479,12 +690,14 @@ type SignCardProps = {
 };
 
 function SignCard({ sign, tone, index }: SignCardProps) {
-  const tacticLabel = sign.tactic ? TACTIC_LABEL[sign.tactic] ?? sign.tactic : null;
+  const tactic = sign.tactic ?? null;
+  const tacticLabel = tactic ? TACTIC_LABEL[tactic] ?? tactic : null;
+  const tacticStyle = tactic ? tacticStyleFor(tactic, tone) : null;
   return (
     <div
       className="relative flex gap-[18px] rounded-[20px] bg-white"
       style={{
-        padding: "20px 24px",
+        padding: "18px 22px",
         border: "0.5px solid rgba(31,26,20,0.06)",
         boxShadow:
           "0 1px 0 rgba(31,26,20,0.03), 0 8px 24px rgba(122,60,28,0.06)",
@@ -508,32 +721,53 @@ function SignCard({ sign, tone, index }: SignCardProps) {
       <div
         className="min-w-0 flex-1 text-[#1f1a14]"
         style={{
-          fontSize: 18,
+          fontSize: 17,
           lineHeight: 1.5,
-          paddingRight: tacticLabel ? 70 : 0,
+          paddingRight: tacticLabel ? 88 : 0,
           textWrap: "pretty",
         }}
       >
         {sign.text}
       </div>
-      {tacticLabel && (
-        <div
-          className="absolute font-semibold uppercase"
-          style={{
-            top: 18,
-            right: 22,
-            fontSize: 11,
-            padding: "4px 9px",
-            borderRadius: 999,
-            background: tone.accentSoft,
-            color: tone.accent,
-            letterSpacing: "0.12em",
-            border: `0.5px solid ${tone.accentLine}`,
-          }}
-        >
-          {tacticLabel}
-        </div>
+      {tacticLabel && tacticStyle && (
+        <TacticChip
+          label={tacticLabel}
+          style={tacticStyle}
+          floating
+        />
       )}
+    </div>
+  );
+}
+
+type TacticChipProps = {
+  label: string;
+  style: TacticStyle;
+  floating?: boolean;
+};
+
+function TacticChip({ label, style, floating }: TacticChipProps) {
+  return (
+    <div
+      className={clsx(
+        "font-semibold uppercase whitespace-nowrap",
+        floating && "absolute"
+      )}
+      style={{
+        ...(floating ? { top: 16, right: 18 } : {}),
+        fontSize: 10,
+        padding: "4px 9px",
+        borderRadius: 999,
+        background: style.bg,
+        color: style.ink,
+        letterSpacing: "0.14em",
+        border: `0.5px solid ${style.border}`,
+        cursor: "help",
+      }}
+      title={style.tooltip}
+      aria-label={`${label} — ${style.tooltip}`}
+    >
+      {label}
     </div>
   );
 }
@@ -568,19 +802,23 @@ type ActionButtonProps = {
   kind: "primary" | "secondary" | "ghost";
   tone: Tone;
   onClick?: () => void;
+  icon?: ReactNode;
 };
 
-function ActionButton({ label, kind, tone, onClick }: ActionButtonProps) {
+function ActionButton({ label, kind, tone, onClick, icon }: ActionButtonProps) {
   const interactive = typeof onClick === "function";
+  // 56px touch target for the two filled CTAs (above Apple HIG's 44px
+  // floor) so Margaret's finger or trackpad doesn't have to fight us.
+  // Ghost stays a hair shorter to keep the visual hierarchy obvious.
   const baseStyle: CSSProperties = {
     width: "100%",
-    height: kind === "ghost" ? 48 : 56,
+    minHeight: kind === "ghost" ? 48 : 56,
     borderRadius: 16,
     fontFamily: INTER,
     fontSize: kind === "ghost" ? 17 : 19,
     fontWeight: 500,
     letterSpacing: -0.1,
-    padding: "0 20px",
+    padding: "0 22px",
     cursor: interactive ? "pointer" : "default",
   };
 
@@ -591,7 +829,7 @@ function ActionButton({ label, kind, tone, onClick }: ActionButtonProps) {
         onClick={onClick}
         disabled={!interactive}
         className={clsx(
-          "flex items-center justify-center gap-2.5 transition-transform",
+          "flex items-center justify-center gap-3 transition-transform",
           interactive
             ? "hover:scale-[1.01] active:scale-[0.99]"
             : "cursor-default"
@@ -604,7 +842,8 @@ function ActionButton({ label, kind, tone, onClick }: ActionButtonProps) {
           boxShadow: `0 1px 0 rgba(255,255,255,0.2) inset, 0 6px 14px ${tone.accentSoft}, 0 0 0 1px ${tone.accent}`,
         }}
       >
-        {label}
+        {icon && <span className="flex shrink-0 items-center">{icon}</span>}
+        <span>{label}</span>
       </button>
     );
   }
@@ -616,7 +855,7 @@ function ActionButton({ label, kind, tone, onClick }: ActionButtonProps) {
         onClick={onClick}
         disabled={!interactive}
         className={clsx(
-          "flex items-center justify-center gap-2.5 bg-white text-[#1f1a14] transition-transform",
+          "flex items-center justify-center gap-3 bg-white text-[#1f1a14] transition-transform",
           interactive
             ? "hover:scale-[1.01] active:scale-[0.99]"
             : "cursor-default"
@@ -627,7 +866,15 @@ function ActionButton({ label, kind, tone, onClick }: ActionButtonProps) {
           boxShadow: "0 1px 2px rgba(31,26,20,0.04)",
         }}
       >
-        {label}
+        {icon && (
+          <span
+            className="flex shrink-0 items-center"
+            style={{ color: tone.accent }}
+          >
+            {icon}
+          </span>
+        )}
+        <span>{label}</span>
       </button>
     );
   }
@@ -638,7 +885,7 @@ function ActionButton({ label, kind, tone, onClick }: ActionButtonProps) {
       onClick={onClick}
       disabled={!interactive}
       className={clsx(
-        "flex items-center justify-center gap-2.5 bg-transparent text-[#1f1a14]/60",
+        "flex items-center justify-center gap-2 bg-transparent text-[#1f1a14]/60",
         interactive ? "hover:text-[#1f1a14]" : "cursor-default"
       )}
       style={{
@@ -649,7 +896,36 @@ function ActionButton({ label, kind, tone, onClick }: ActionButtonProps) {
         textDecorationColor: "rgba(31,26,20,0.25)",
       }}
     >
-      {label}
+      {icon && (
+        <span className="flex shrink-0 items-center opacity-70">{icon}</span>
+      )}
+      <span>{label}</span>
     </button>
+  );
+}
+
+// Visually-hidden live region. Margaret's screen reader (VoiceOver on
+// macOS) announces this on render; sighted users already see the
+// headline. We keep the styles inline so we don't depend on a global
+// `.sr-only` utility being present.
+function SrLive({ text }: { text: string }) {
+  return (
+    <div
+      aria-live="polite"
+      role="status"
+      style={{
+        position: "absolute",
+        width: 1,
+        height: 1,
+        padding: 0,
+        margin: -1,
+        overflow: "hidden",
+        clip: "rect(0,0,0,0)",
+        whiteSpace: "nowrap",
+        border: 0,
+      }}
+    >
+      {text}
+    </div>
   );
 }
