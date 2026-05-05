@@ -65,6 +65,7 @@
       "exceptionDomain": "",
       "signingIdentity": null,
       "providerShortName": null,
+      "infoPlist": "Info.plist",
       "dmg": {
         "background": null,
         "windowSize": {
