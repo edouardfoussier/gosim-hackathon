@@ -181,15 +181,49 @@ def run(args: dict[str, Any]) -> str:
     if scope not in ("active_window", "full"):
         scope = "active_window"
 
+    print(f"[read_screen] question={question!r} scope={scope}", flush=True)
+
     image_b64 = _capture_screen(scope)
+    bounds = _capture_active_window_bounds() if scope == "active_window" else None
+    if bounds:
+        print(
+            f"[read_screen] captured active window bounds={bounds} "
+            f"({len(image_b64) // 1024} KB png)",
+            flush=True,
+        )
+    else:
+        print(
+            f"[read_screen] captured full primary monitor (active window "
+            f"bounds unavailable; {len(image_b64) // 1024} KB png)",
+            flush=True,
+        )
+
     prefs_hint = _wiki_prefs_hint(Wiki())
     prompt = _build_prompt(question, prefs_hint)
 
     llm = get_provider()
-    # ``LLMProvider.see`` raises ``RuntimeError`` when no vision model is
-    # configured — that's the proxy-only configuration. Let it propagate;
-    # the planner's exception path turns it into a spoken explanation.
-    return (llm.see(image_b64, prompt) or "").strip() or (
+    print(
+        f"[read_screen] sending to vision model={llm.vision_model or '(unset)'}",
+        flush=True,
+    )
+
+    try:
+        # ``LLMProvider.see`` raises ``RuntimeError`` when no vision model is
+        # configured — that's the proxy-only configuration. Let it propagate;
+        # the planner's exception path turns it into a spoken explanation.
+        reply = (llm.see(image_b64, prompt) or "").strip()
+    except RuntimeError as exc:
+        # Surface the missing-vision-model case as a clear spoken sentence
+        # rather than letting the realtime tool path swallow it.
+        print(f"[read_screen] vision unavailable: {exc}", flush=True)
+        return (
+            "I can't look at your screen right now — vision is only available "
+            "on the direct Z.AI key, and we're on the proxy. Would you like "
+            "me to read your inbox instead?"
+        )
+
+    print(f"[read_screen] reply={reply[:120]!r}…", flush=True)
+    return reply or (
         "I looked at your screen but couldn't make out an answer to that."
     )
 

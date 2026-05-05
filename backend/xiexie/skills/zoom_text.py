@@ -46,13 +46,17 @@ def _press_cmd_chord(key: str, times: int) -> tuple[bool, str]:
 
 def run(args: dict[str, Any]) -> str:
     amount = str(args.get("amount", "bigger")).strip().lower()
+    # Logged on every call so we can see in the backend log when the
+    # model picks the wrong direction (which is what Edouard hit when
+    # "agrandir le texte" was routed as ``amount=smaller``).
+    print(f"[zoom_text] called with amount={amount!r}", flush=True)
     if amount not in _PRESSES_BY_AMOUNT:
         return f"I can make things smaller, normal, bigger, or much bigger — {amount!r} is not one of those."
     key, times = _PRESSES_BY_AMOUNT[amount]
     ok, output = _press_cmd_chord(key, times)
     if not ok:
         return (
-            "I tried to make the text bigger but the front-most app didn't accept the "
+            "I tried to change the text size but the front-most app didn't accept the "
             "shortcut. Most browsers and Mail.app should work — try clicking on the "
             "window first, then ask me again."
         )
@@ -69,10 +73,14 @@ SKILL = register(
     Skill(
         name="zoom_text",
         description=(
-            "Increase or decrease the text size in the foreground macOS application "
-            "by sending Cmd+Plus / Cmd+Minus. Works in Chrome, Safari, Firefox, "
-            "Mail.app, Pages, Preview, Notes, and most other apps that honour the "
-            "universal zoom shortcut."
+            "Change the text size in the foreground macOS application. "
+            "Use ``amount='bigger'`` (default) when the user asks to MAKE TEXT "
+            "LARGER / AGRANDIR / zoom in / increase / make it easier to read. "
+            "Use ``amount='smaller'`` ONLY when the user explicitly asks to make text "
+            "smaller / réduire / zoom out / make it smaller. Sends Cmd+= or "
+            "Cmd+- via System Events; works in Chrome, Safari, Firefox, Mail.app, "
+            "Pages, Preview, Notes, and most apps that honour the universal "
+            "zoom shortcut."
         ),
         parameters={
             "type": "object",
@@ -81,7 +89,11 @@ SKILL = register(
                     "type": "string",
                     "enum": ["smaller", "normal", "bigger", "much bigger"],
                     "default": "bigger",
-                    "description": "How much to change the text size. Defaults to one notch bigger.",
+                    "description": (
+                        "Direction + magnitude. 'bigger' = LARGER text (zoom in, "
+                        "agrandir). 'smaller' = smaller text (zoom out). 'normal' "
+                        "resets to default. 'much bigger' is bigger ×4."
+                    ),
                 }
             },
         },

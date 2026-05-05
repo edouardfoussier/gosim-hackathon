@@ -457,7 +457,7 @@ export default function Home() {
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-ember-400 opacity-60" />
                 <span className="relative inline-flex h-2 w-2 rounded-full bg-ember-500" />
               </span>
-              <span className="text-xs">listening for &ldquo;Xiexie&rdquo;…</span>
+              <span className="text-xs">listening for &ldquo;Xiexie&rdquo; or &ldquo;computer&rdquo;…</span>
             </span>
           )}
           <div className="flex items-center gap-2">

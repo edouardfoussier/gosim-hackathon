@@ -32,12 +32,22 @@
  */
 
 const WAKE_VARIANTS = [
+  // Primary brand wake-word (still hard for browser STT to lock onto so
+  // we keep multiple romanisations).
   "xiexie",
   "shieshie",
   "shi shi",
   "she she",
   "sheshe",
   "xie xie",
+  // Demo-friendly fallback: Web Speech API recognises this with near-100 %
+  // recall, and Picovoice's free built-in keyword for the .app path is
+  // also "computer" — keeping the same word across both routes keeps the
+  // pitch story coherent ("works in browser, works in the .app, same
+  // trigger").
+  "computer",
+  "computer please",
+  "hey computer",
 ];
 
 const CLOSE_VARIANTS = [

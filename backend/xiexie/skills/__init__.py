@@ -15,6 +15,8 @@ from . import open_app  # noqa: F401
 from . import find_file  # noqa: F401
 from . import set_reminder  # noqa: F401
 from . import zoom_text  # noqa: F401
+from . import play_music  # noqa: F401
+from . import system_status  # noqa: F401  # check_wifi / check_battery / adjust_volume
 from . import read_screen  # noqa: F401
 
 # Stubs (kept on-brand; logged to unhandled_asks.md)
