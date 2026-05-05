@@ -435,6 +435,32 @@ dispatch bug likely disappears (it's proxy-specific) and we collapse
 back to all-GLM with one ``XIEXIE_PLANNER_MODEL=glm-5.1`` line in
 ``.env``.
 
+### 2026-05-05 (late afternoon, addendum) — Direct Z.AI key tested, awaiting topup
+Edouard obtained a direct Z.AI key (`17b4f…`, base `api.z.ai/api/paas/v4`).
+The auth + endpoint shape work but every model call returns HTTP 429:
+```
+1113 - Insufficient balance or no resource package. Please recharge.
+```
+i.e. the account itself has no inference credit. The path forward is to
+ask the Z.AI mentor on-site for a topup or a hackathon-credited key.
+
+Tested as a side-quest: per Z.AI docs the tool-calling-capable models are
+`glm-4.6`, `glm-4.7`, `glm-5` (explicitly NOT `glm-5.1`). We retried the
+proxy with `glm-5` instead of `glm-5.1`:
+- ``Take a closer look at msg-003`` → ✅ tool_call(analyze_email, {…})
+- ``Did I get any new emails?`` → ❌ narration only
+- ``Open Mail for me`` → ❌ narration only
+
+So `glm-5` on the proxy is *partially* better but still 2/3 fails. The
+DeepSeek-V4-Pro dispatch hybrid stays the production setup until either
+the direct key has balance or we get a stable build of `glm-4.6` on the
+proxy. The cut-over is one env var (``ZAI_BASE_URL`` + ``ZAI_MODEL``);
+nothing else changes.
+
+The fully topped-up + direct path also unlocks vision (``glm-4.5v``,
+``glm-4.6v``, ``glm-5v-turbo``, ``glm-ocr``) and audio (``glm-asr-2512``)
+which we cannot use on the proxy.
+
 ### 2026-05-05 (early afternoon) — Wire 3 free-tier external APIs
 Audit of the 2026 landscape (FTC API, urlscan.io, PhishTank/OpenPhish,
 URLhaus, Google Safe Browsing, VirusTotal, EmailRep) chose the three with
