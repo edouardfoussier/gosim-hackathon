@@ -1,0 +1,58 @@
+# env
+.env
+.env.local
+.env.*.local
+
+# python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+.uv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+
+# node
+node_modules/
+.next/
+out/
+.turbo/
+*.tsbuildinfo
+.pnpm-store/
+
+# os
+.DS_Store
+Thumbs.db
+
+# editor
+.vscode/
+.idea/
+*.swp
+
+# xiexie runtime data — DO commit wiki seed, do NOT commit raw runtime data
+data/raw/transcripts/*
+!data/raw/transcripts/.gitkeep
+data/raw/screenshots/*
+!data/raw/screenshots/.gitkeep
+
+# audio cache
+*.wav
+*.mp3
+!data/voice-samples/*.wav
+
+# logs
+*.log
+logs/
+
+# whisper / kokoro models
+models/
+*.bin
+*.gguf
+
+# tauri (if we wrap later)
+src-tauri/target/

@@ -1,0 +1,49 @@
+[project]
+name = "xiexie"
+version = "0.1.0"
+description = "Voice-first computer-use agent for seniors with Karpathy LLM-Wiki memory."
+readme = "README.md"
+requires-python = ">=3.11"
+authors = [{ name = "Edouard Foussier" }]
+license = { text = "MIT" }
+
+dependencies = [
+    # web
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "websockets>=14",
+    "python-dotenv>=1.0",
+    "pydantic>=2.9",
+    "httpx>=0.28",
+    # LLM (Z.AI is OpenAI-compatible, so we use the openai SDK with a custom base_url)
+    "openai>=1.55",
+    # voice
+    "faster-whisper>=1.0",
+    "soundfile>=0.12",
+    "numpy>=1.26",
+    # memory / wiki
+    "python-frontmatter>=1.1",
+    "pyyaml>=6",
+    # OS / computer use
+    "pyautogui>=0.9.54; sys_platform == 'darwin'",
+    # screenshots
+    "pillow>=10",
+    "mss>=10",
+    # browser automation (heavy — install separately if needed)
+    # "browser-use>=0.1.40",
+]
+
+[project.optional-dependencies]
+browser = ["browser-use>=0.1.40", "playwright>=1.49"]
+tts-kokoro = ["kokoro>=0.7", "torch>=2.4"]
+dev = ["ruff>=0.8", "pytest>=8"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP"]
+
+[tool.uv]
+dev-dependencies = ["ruff>=0.8", "pytest>=8"]
