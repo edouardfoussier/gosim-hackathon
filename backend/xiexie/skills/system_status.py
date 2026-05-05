@@ -33,40 +33,59 @@ def _osascript(script: str) -> tuple[bool, str]:
 # ─────────────────────────────────────────────────────────────────────────────
 
 
+def _detect_wifi_interface() -> str | None:
+    """Return the BSD interface name of the active Wi-Fi card (en0/en1/…).
+
+    macOS Sequoia and later removed the legacy ``airport`` binary, so we
+    have to ask ``networksetup -listallhardwareports`` for "Wi-Fi" and
+    pull the device after it. Returns None if no Wi-Fi card is found.
+    """
+    ok, out = _run(["networksetup", "-listallhardwareports"], timeout=4)
+    if not ok:
+        return None
+    # Output blocks look like:
+    #   Hardware Port: Wi-Fi
+    #   Device: en0
+    #   Ethernet Address: …
+    match = re.search(
+        r"Hardware Port:\s*Wi-?Fi\s*\n\s*Device:\s*(\S+)",
+        out,
+        re.IGNORECASE,
+    )
+    return match.group(1) if match else None
+
+
 def _wifi_run(_args: dict[str, Any]) -> str:
     print("[check_wifi] called", flush=True)
 
-    # Try the modern path first (works on macOS 14+ even though airport
-    # was deprecated). Fall back to networksetup which works on every
-    # supported macOS.
-    ok, out = _run(
-        ["/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport", "-I"],
-        timeout=4,
-    )
-    if ok and "SSID" in out:
-        ssid_match = re.search(r"^\s*SSID:\s*(.+)$", out, re.MULTILINE)
-        rssi_match = re.search(r"^\s*agrCtlRSSI:\s*(-?\d+)", out, re.MULTILINE)
-        ssid = ssid_match.group(1).strip() if ssid_match else ""
-        rssi = int(rssi_match.group(1)) if rssi_match else 0
-        if ssid:
-            quality = (
-                "strong" if rssi >= -55 else "good" if rssi >= -70 else "a bit weak"
-            )
-            return f"You're connected to {ssid}. The signal is {quality}."
+    iface = _detect_wifi_interface() or "en0"
 
-    ok, out = _run(["networksetup", "-getairportnetwork", "en0"], timeout=4)
-    if ok and "Current Wi-Fi Network:" in out:
-        ssid = out.split("Current Wi-Fi Network:", 1)[1].strip()
-        return f"You're connected to {ssid}."
-
-    # Power state check as the final fallback.
-    ok, out = _run(["networksetup", "-getairportpower", "en0"], timeout=4)
+    # Power state — quick early exit when wifi is just off.
+    ok, out = _run(["networksetup", "-getairportpower", iface], timeout=4)
     if ok and "Off" in out:
         return "Your WiFi is turned off. Want me to walk you through turning it on?"
 
+    # SSID via networksetup. macOS 14+ may print
+    # "You are not associated with an AirPort network." when offline.
+    ok, out = _run(["networksetup", "-getairportnetwork", iface], timeout=4)
+    if ok and "Current Wi-Fi Network:" in out:
+        ssid = out.split("Current Wi-Fi Network:", 1)[1].strip()
+        if ssid and ssid.lower() != "you are not associated with an airport network.":
+            return f"You're connected to {ssid}."
+    if ok and "not associated" in out.lower():
+        return "WiFi is on but you're not connected to a network."
+
+    # Final fallback: ipconfig getsummary returns the active SSID on
+    # current macOS even when networksetup doesn't.
+    ok, out = _run(["ipconfig", "getsummary", iface], timeout=4)
+    if ok:
+        match = re.search(r"\bSSID\s*:\s*(.+)", out)
+        if match:
+            return f"You're connected to {match.group(1).strip()}."
+
     return (
-        "I couldn't read the WiFi status — try opening the WiFi menu in your "
-        "menu bar to check from there."
+        "I couldn't read the WiFi status — try clicking the WiFi icon in your "
+        "menu bar to see what's going on."
     )
 
 

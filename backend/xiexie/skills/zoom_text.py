@@ -15,10 +15,10 @@ from typing import Any
 from .registry import Skill, register
 
 _PRESSES_BY_AMOUNT = {
-    "smaller": ("minus", 1),
-    "normal": ("zero", 1),
-    "bigger": ("plus", 2),
-    "much bigger": ("plus", 4),
+    "smaller": ("-", 1),
+    "normal": ("0", 1),
+    "bigger": ("+", 2),
+    "much bigger": ("+", 4),
 }
 
 
@@ -29,13 +29,21 @@ def _osascript(script: str) -> tuple[bool, str]:
     return out.returncode == 0, (out.stdout or out.stderr).strip()
 
 
-def _press_cmd_chord(key: str, times: int) -> tuple[bool, str]:
-    # AppleScript ``key code`` map for the symbol row keys we care about.
-    # We use ``key code`` rather than ``keystroke`` because Cmd+= / Cmd+-
-    # behave more reliably across keyboard layouts when sent by code.
-    code_map = {"plus": 24, "minus": 27, "zero": 29}  # =/+, -/_, 0/)
-    code = code_map[key]
-    repeat = "\n".join(["    key code {} using command down".format(code)] * times)
+def _press_cmd_chord(char: str, times: int) -> tuple[bool, str]:
+    """Send Cmd+<char> ``times`` times via System Events ``keystroke``.
+
+    Earlier we used ``key code 24`` (the physical position of `=` on a US
+    QWERTY layout). On French AZERTY that same physical key produces
+    ``-``, so Cmd+(key code 24) was sending Cmd+- → zoom OUT instead of
+    zoom IN — exactly the inversion Edouard hit. ``keystroke`` operates
+    on characters and lets the OS pick the right physical chord for the
+    user's current layout, so it works on QWERTY, AZERTY, QWERTZ, Dvorak,
+    etc. without us caring.
+    """
+    safe = char.replace('"', '\\"')
+    repeat = "\n".join(
+        [f'    keystroke "{safe}" using command down'] * times
+    )
     script = f"""
     tell application "System Events"
 {repeat}
