@@ -496,8 +496,12 @@ class GlyphOverlay(QWidget):
             return
 
         avail = screen.availableGeometry()
-        margin_right = 24
-        margin_top = 28
+        # Drop the glyph well below the typical browser chrome (tab bar +
+        # URL bar ≈ 80–120 px) so it doesn't sit on top of native buttons
+        # like Chrome's Share / Profile / extensions row, which produced
+        # confusing overlap with browser-native tooltips during testing.
+        margin_right = 32
+        margin_top = 120
         glyph_right_in_window = self._icon_base_pos.x() + GLYPH_INNER
         target_x = avail.right() - margin_right - glyph_right_in_window
         target_y = avail.top() + margin_top - self._icon_base_pos.y()

@@ -35,8 +35,8 @@ def _parse_args(argv: Sequence[str] | None) -> argparse.Namespace:
     )
     p.add_argument(
         "--message",
-        default="Demo alert from overlay.demo",
-        help="Optional message attached to the alert.",
+        default="",
+        help="Optional message attached to the alert (empty = glyph alone, no tooltip pill).",
     )
     p.add_argument(
         "--duration",
