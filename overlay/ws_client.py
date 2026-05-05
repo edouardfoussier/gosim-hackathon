@@ -14,6 +14,10 @@ react from the main thread:
   triggered by ``{"type": "working", "state": "start"|"stop", "label": "..."}``.
   Lights up the soundwave in a calmer "thinking" mode while a skill
   runs silently (vision call, scam analysis, AppleScript automation).
+- :pyattr:`point` — payload ``(x: int, y: int, label: str | None, raw: dict)``,
+  triggered by ``{"type": "point", "x": 1240, "y": 820, "label": "..."}``.
+  Drives :class:`overlay.pointer.PointerOverlay` — a ghost cursor that
+  glides to (x, y) and flashes the label.
 
 Other message types from the backend (``transcript``, ``speak``,
 ``skill_*``, ``done``, ``confirm``) are silently ignored — this bridge
@@ -62,6 +66,7 @@ class WsBridge(QObject):
     # ``isinstance(level, float)`` cleanly.
     speaking = pyqtSignal(str, object, dict)
     working = pyqtSignal(str, object, dict)
+    point = pyqtSignal(int, int, object, dict)
     connected = pyqtSignal(bool)
 
     def __init__(self, url: str = DEFAULT_URL, parent: QObject | None = None) -> None:
@@ -159,4 +164,15 @@ class WsBridge(QObject):
             raw_label = payload.get("label")
             label = str(raw_label) if isinstance(raw_label, str) else None
             self.working.emit(state, label, payload)
+            return
+
+        if kind == "point":
+            try:
+                x = int(payload.get("x", 0))
+                y = int(payload.get("y", 0))
+            except (TypeError, ValueError):
+                return
+            raw_label = payload.get("label")
+            label = str(raw_label) if isinstance(raw_label, str) else None
+            self.point.emit(x, y, label, payload)
             return

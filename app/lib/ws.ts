@@ -33,6 +33,20 @@ export type ServerEvent =
       state: "start" | "stop";
       label?: string;
     }
+  // Cursor pointing (Clicky parity). Backend emits one frame per
+  // [POINT:x,y|label] tag GLM-4.5V embedded in its read_screen reply
+  // — coordinates are global macOS screen pixels (top-left origin),
+  // already translated from image space using the capture geometry.
+  // The native PyQt6 PointerOverlay paints a ghost cursor + label
+  // anywhere on the desktop; the in-browser ``CursorPointer``
+  // component clamps the same coords to its viewport for the
+  // browser-only fallback path.
+  | {
+      type: "point";
+      x: number;
+      y: number;
+      label?: string;
+    }
   | { type: "done" }
   | { type: "pong" }
   | { type: "error"; message: string };

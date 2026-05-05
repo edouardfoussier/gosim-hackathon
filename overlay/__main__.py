@@ -41,6 +41,7 @@ from PyQt6.QtCore import QTimer
 from PyQt6.QtWidgets import QApplication
 
 from .glyph import GlyphOverlay
+from .pointer import PointerOverlay
 from .soundwave import SoundwaveOverlay
 from .ws_client import DEFAULT_URL, WsBridge
 
@@ -86,6 +87,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     overlay = GlyphOverlay(position_mode=args.position, play_chime=args.chime)
     soundwave = SoundwaveOverlay()
+    pointer = PointerOverlay()
     duration_ms = max(1000, int(args.duration * 1000))
 
     if args.selftest:
@@ -148,9 +150,15 @@ def main(argv: Sequence[str] | None = None) -> int:
                 print("[overlay] working stop")
                 soundwave.stop()
 
+    def _on_point(x: int, y: int, label: object, _raw: dict) -> None:
+        hint = label if isinstance(label, str) else None
+        print(f"[overlay] point at ({x},{y}) label={hint!r}")
+        pointer.show_at(x, y, hint)
+
     bridge.alert.connect(_on_alert)
     bridge.speaking.connect(_on_speaking)
     bridge.working.connect(_on_working)
+    bridge.point.connect(_on_point)
     bridge.connected.connect(_on_connection)
     bridge.start()
     print(f"[overlay] listening on {args.url} (Ctrl-C to quit)")
@@ -165,6 +173,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             pass
         try:
             overlay.hide_alert()
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            pointer.hide()
         except Exception:  # noqa: BLE001
             pass
         app.quit()

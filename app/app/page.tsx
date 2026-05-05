@@ -18,6 +18,7 @@ import {
 } from "@/lib/wake-listener";
 import { VerdictCard } from "@/components/verdict-card";
 import { CursorHalo } from "@/components/cursor-halo";
+import { CursorPointer, type PointEvent } from "@/components/cursor-pointer";
 
 type Variant = "phishing" | "suspicious" | "clear";
 type Confidence = "high" | "medium" | "low";
@@ -87,6 +88,11 @@ export default function Home() {
   const [workingActive, setWorkingActive] = useState(false);
   const [workingLabel, setWorkingLabel] = useState<string | null>(null);
   const workingResetTimerRef = useRef<number | null>(null);
+  // Cursor-pointer state: latest [POINT:x,y|label] hint emitted by GLM-4.5V
+  // through ``read_screen``. The component animates a chevron + label
+  // flag at the screen-translated coordinates and auto-fades.
+  const [pointEvent, setPointEvent] = useState<PointEvent | null>(null);
+  const pointEventIdRef = useRef(0);
 
   const wsRef = useRef<WebSocket | null>(null);
   const recorderRef = useRef<MicRecorder | null>(null);
@@ -143,6 +149,19 @@ export default function Home() {
           setHaloLevel(null);
         }
         break;
+      case "point": {
+        // Bump a monotonically increasing id so the CursorPointer
+        // re-mounts and re-fires its animation even when GLM emits
+        // the same coordinates twice in a row.
+        pointEventIdRef.current += 1;
+        setPointEvent({
+          id: pointEventIdRef.current,
+          x: e.x,
+          y: e.y,
+          label: e.label ?? null,
+        });
+        break;
+      }
       case "working":
         if (e.state === "start") {
           if (workingResetTimerRef.current !== null) {
@@ -482,6 +501,13 @@ export default function Home() {
         working={workingActive}
         label={workingLabel}
       />
+
+      {/* Cursor pointer: ghost cursor + label flag fired on every
+          [POINT:x,y|label] tag GLM-4.5V emits in read_screen. The
+          native PyQt6 PointerOverlay paints the same thing on the
+          desktop when ``python -m overlay`` is running — this
+          component is the always-available browser fallback. */}
+      <CursorPointer point={pointEvent} />
 
       {/* Header */}
       <header className="w-full max-w-3xl flex items-center justify-between mb-8">

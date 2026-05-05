@@ -40,11 +40,85 @@ from __future__ import annotations
 import base64
 import io
 import re
+import threading
+from dataclasses import dataclass
 from typing import Any
 
 from ..llm import get_provider
 from ..memory import Wiki
 from .registry import Skill, register
+
+
+# ── Cursor pointing (Clicky parity) ───────────────────────────────────────
+# The vision model is taught to embed ``[POINT:x,y|label]`` markers in its
+# reply when guidance is helpful (e.g. "Click [POINT:920,540|the Reply
+# button]"). We parse them after the fact, translate the image-space
+# coordinates back to global macOS screen pixels using the capture
+# geometry, strip them from the spoken text, and stash the points so
+# ``main.py`` can fan them out via ``bus.broadcast_point`` after the
+# skill returns. (The skill itself runs in a worker thread — see
+# ``asyncio.to_thread`` in main.py — so it can't ``await`` directly.)
+_POINT_RE = re.compile(
+    r"\[POINT:\s*(\d+)\s*,\s*(\d+)\s*(?:\|\s*([^\]]+?))?\s*\]",
+    flags=re.IGNORECASE,
+)
+
+# Module-level stash, mutex-guarded because skills run in worker threads
+# while ``pop_last_points`` is called from the asyncio loop on main.py.
+_points_lock = threading.Lock()
+_last_points: list[dict[str, Any]] = []
+
+
+def pop_last_points() -> list[dict[str, Any]]:
+    """Return and clear any ``[POINT:...]`` hints emitted by the most
+    recent ``read_screen`` invocation. Each entry is
+    ``{"x": int, "y": int, "label": str | None}``.
+
+    Mirrors the ``analyze_email.pop_last_verdict`` pattern so a single
+    call site in ``main.py`` can fan out broadcasts after the skill
+    completes without giving the worker thread access to the loop.
+    """
+    with _points_lock:
+        out = list(_last_points)
+        _last_points.clear()
+    return out
+
+
+def _stash_points(points: list[dict[str, Any]]) -> None:
+    with _points_lock:
+        _last_points.clear()
+        _last_points.extend(points)
+
+
+@dataclass
+class CaptureGeometry:
+    """Where the captured image sits in global macOS screen-point space.
+
+    All fields use AppKit logical points (the unit Quartz reports), not
+    Retina pixels — ``CGWindowListCreateImage`` and ``mss`` both work in
+    points, and ``CursorOverlay`` paints in points, so we keep the same
+    units end-to-end.
+    """
+    image_w: int
+    image_h: int
+    source_x: int
+    source_y: int
+    source_w: int
+    source_h: int
+    pointable: bool  # False when the source rect was off-screen / unknown
+
+
+def _translate_to_screen(
+    img_x: int, img_y: int, geo: CaptureGeometry
+) -> tuple[int, int]:
+    """Map image-space coords to global screen coords using the
+    proportional scale from the capture geometry.
+    """
+    if geo.image_w <= 0 or geo.image_h <= 0:
+        return geo.source_x + img_x, geo.source_y + img_y
+    sx = geo.source_x + int(img_x * (geo.source_w / geo.image_w))
+    sy = geo.source_y + int(img_y * (geo.source_h / geo.image_h))
+    return sx, sy
 
 # Sections of ``wiki/preferences.md`` that bias the spoken reply (text size,
 # acronym avoidance, "repeat numbers twice"). We splice them into the
@@ -282,7 +356,7 @@ def _cgimage_to_pil(image_ref):  # type: ignore[no-untyped-def]
 
 def _activate_app_and_grab(
     app: str, bounds: tuple[int, int, int, int] | None
-) -> tuple[Any, str] | None:
+) -> tuple[Any, str, tuple[int, int, int, int] | None] | None:
     """Last-resort fallback: bring ``app`` to the front, then mss-capture.
 
     Used when ``CGWindowListCreateImage`` returns nil — typically because
@@ -360,13 +434,19 @@ def _activate_app_and_grab(
             region = {"left": left, "top": top, "width": width, "height": height}
         else:
             region = sct.monitors[1] if len(sct.monitors) > 1 else sct.monitors[0]
+            left = int(region.get("left", 0))
+            top = int(region.get("top", 0))
+            width = int(region.get("width", 0))
+            height = int(region.get("height", 0))
         sct_img = sct.grab(region)
         img = Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
 
-    return img, f"{owner} window (activate-then-grab fallback)"
+    return img, f"{owner} window (activate-then-grab fallback)", (left, top, width, height)
 
 
-def _capture_app_window(app: str) -> tuple[Any, str] | None:
+def _capture_app_window(
+    app: str,
+) -> tuple[Any, str, tuple[int, int, int, int] | None] | None:
     """Capture a specific app's window into a PIL Image (Clicky parity).
 
     Uses ``CGWindowListCreateImage`` with ``kCGWindowImageBoundsIgnoreFraming``,
@@ -429,11 +509,19 @@ def _capture_app_window(app: str) -> tuple[Any, str] | None:
         return _activate_app_and_grab(app, None)
 
     suffix = " (on-screen)" if on_screen else " (off-screen, pulled from WindowServer)"
-    return img, f"{owner} window{suffix}"
+    # Quartz returns the window pixels at its native (logical-points) size
+    # — same as ``bounds.width/height``. We pass those through so the
+    # geometry calculation accounts for any later resize correctly.
+    source_bounds = bounds if on_screen else None
+    return img, f"{owner} window{suffix}", source_bounds
 
 
-def _encode_for_vision(img) -> str:  # type: ignore[no-untyped-def]
-    """Down-scale + JPEG-encode + base64 for the vision endpoint."""
+def _encode_for_vision(img) -> tuple[str, int, int]:  # type: ignore[no-untyped-def]
+    """Down-scale + JPEG-encode + base64. Returns ``(b64, w_px, h_px)``
+    where the dimensions are the **post-resize** size — i.e. the image
+    the vision model actually sees. The caller uses those to translate
+    image coords back to source-rect coords.
+    """
     from PIL import Image
 
     if img.width > _MAX_SCREENSHOT_DIM or img.height > _MAX_SCREENSHOT_DIM:
@@ -446,11 +534,21 @@ def _encode_for_vision(img) -> str:  # type: ignore[no-untyped-def]
 
     buf = io.BytesIO()
     img.save(buf, format="JPEG", quality=_JPEG_QUALITY, optimize=True)
-    return base64.b64encode(buf.getvalue()).decode("ascii")
+    return (
+        base64.b64encode(buf.getvalue()).decode("ascii"),
+        img.width,
+        img.height,
+    )
 
 
-def _capture_via_mss(scope: str) -> Any:
-    """Fallback path: full primary monitor or front-most window via mss."""
+def _capture_via_mss(
+    scope: str,
+) -> tuple[Any, tuple[int, int, int, int]]:
+    """Fallback path: full primary monitor or front-most window via mss.
+
+    Returns ``(image, (left, top, width, height))`` where the rect is
+    in global screen-point coordinates. Always pointable.
+    """
     import mss
 
     from PIL import Image
@@ -465,15 +563,19 @@ def _capture_via_mss(scope: str) -> Any:
             region = {"left": left, "top": top, "width": width, "height": height}
         else:
             region = sct.monitors[1] if len(sct.monitors) > 1 else sct.monitors[0]
+            left = int(region.get("left", 0))
+            top = int(region.get("top", 0))
+            width = int(region.get("width", 0))
+            height = int(region.get("height", 0))
         sct_img = sct.grab(region)
         img = Image.frombytes("RGB", sct_img.size, sct_img.bgra, "raw", "BGRX")
-    return img
+    return img, (left, top, width, height)
 
 
 def _capture_screen(
     scope: str = "active_window", app: str | None = None
-) -> tuple[str, str]:
-    """Capture and return ``(base64_jpeg, source_label)``.
+) -> tuple[str, str, CaptureGeometry]:
+    """Capture and return ``(base64_jpeg, source_label, geometry)``.
 
     Resolution order:
     1. ``app`` set → Quartz window-ID capture (occluded-friendly, the
@@ -482,31 +584,128 @@ def _capture_screen(
     3. ``scope="full"`` (or any fallback) → mss whole primary monitor.
 
     ``source_label`` describes what was captured — surfaced in logs and
-    optionally prepended to the prompt so GLM-4.5V knows the context.
+    prepended to the vision prompt so GLM-4.5V knows the context.
+
+    ``geometry`` lets the caller translate ``[POINT:x,y]`` markers
+    emitted by the vision model back to global macOS screen pixels —
+    only meaningful when ``geometry.pointable`` is True (i.e. the
+    source rect was on the active Space and inside the visible
+    primary monitor).
     """
     if app:
         captured = _capture_app_window(app)
         if captured is not None:
-            img, label = captured
-            return _encode_for_vision(img), label
+            img, label, source = captured
+            b64, w_img, h_img = _encode_for_vision(img)
+            if source is not None:
+                geo = CaptureGeometry(
+                    image_w=w_img,
+                    image_h=h_img,
+                    source_x=source[0],
+                    source_y=source[1],
+                    source_w=source[2],
+                    source_h=source[3],
+                    pointable=source[1] >= 0 and source[0] >= -100,
+                )
+            else:
+                geo = CaptureGeometry(
+                    image_w=w_img, image_h=h_img,
+                    source_x=0, source_y=0, source_w=w_img, source_h=h_img,
+                    pointable=False,
+                )
+            return b64, label, geo
         print(
             f"[read_screen] no window matched app={app!r} (not running, "
             f"or minimised); falling back to {scope}",
             flush=True,
         )
 
-    img = _capture_via_mss(scope)
+    img, source = _capture_via_mss(scope)
+    b64, w_img, h_img = _encode_for_vision(img)
     label = "front-most window" if scope == "active_window" else "full primary monitor"
-    return _encode_for_vision(img), label
+    geo = CaptureGeometry(
+        image_w=w_img,
+        image_h=h_img,
+        source_x=source[0],
+        source_y=source[1],
+        source_w=source[2],
+        source_h=source[3],
+        pointable=source[1] >= 0 and source[0] >= -100,
+    )
+    return b64, label, geo
 
 
-def _build_prompt(question: str, prefs_hint: str, source_label: str) -> str:
+_POINTING_INSTRUCTION = (
+    "POINTING (very important when guidance is needed):\n"
+    "If your reply would be more helpful by pointing Margaret to a "
+    "specific spot in the screenshot — a button to click, a field to "
+    "read, an icon to find — embed an inline marker like "
+    "[POINT:x,y|short label] **inside** the relevant sentence. The "
+    "coordinates x,y are PIXELS in THIS screenshot (top-left is 0,0; "
+    "bottom-right is {img_w},{img_h}). The label is 1-4 words shown "
+    "next to a pulsing pointer on her real screen. Examples:\n"
+    "  - 'Click [POINT:1240,820|the blue Reply button] at the top'\n"
+    "  - 'Your bill amount is [POINT:540,360|right here].'\n"
+    "Only emit a POINT when the user benefits from a visual cue. Do "
+    "not emit one for full-screen / off-screen captures (you'll see "
+    "the next line tell you whether pointing is allowed)."
+)
+
+
+def _build_prompt(
+    question: str, prefs_hint: str, source_label: str, geo: CaptureGeometry
+) -> str:
     parts = [_PROMPT_PREAMBLE]
     parts.append(f"This screenshot is: {source_label}.")
+    if geo.pointable:
+        parts.append(
+            _POINTING_INSTRUCTION.format(img_w=geo.image_w, img_h=geo.image_h)
+        )
+    else:
+        parts.append(
+            "POINTING is NOT available for this screenshot (off-screen or "
+            "fallback capture). Do NOT include any [POINT:...] markers."
+        )
     if prefs_hint:
         parts.append("User preferences (apply when answering):\n" + prefs_hint)
     parts.append("Margaret's question: " + question.strip())
     return "\n\n".join(parts)
+
+
+def _extract_and_translate_points(
+    text: str, geo: CaptureGeometry
+) -> tuple[str, list[dict[str, Any]]]:
+    """Return ``(text_without_markers, [{x, y, label}, …])``.
+
+    The marker syntax is ``[POINT:x,y|label]`` (label optional). The
+    visible *label* (or a short fallback) is left in the spoken text
+    so Margaret hears "click the Reply button" — not "click POINT".
+    """
+    out_text = text
+    points: list[dict[str, Any]] = []
+
+    def _sub(m: re.Match[str]) -> str:
+        try:
+            img_x = int(m.group(1))
+            img_y = int(m.group(2))
+        except (TypeError, ValueError):
+            return ""
+        label = (m.group(3) or "").strip() or None
+        # Clamp to image bounds before translating — vision models often
+        # over-shoot a few pixels past the edge.
+        img_x = max(0, min(geo.image_w, img_x))
+        img_y = max(0, min(geo.image_h, img_y))
+        sx, sy = _translate_to_screen(img_x, img_y, geo)
+        points.append({"x": sx, "y": sy, "label": label})
+        # Replace the marker with just the label (or empty) so the
+        # spoken text reads naturally to the TTS.
+        return label or ""
+
+    out_text = _POINT_RE.sub(_sub, out_text)
+    # Collapse any double spaces / orphan punctuation we left behind.
+    out_text = re.sub(r"\s{2,}", " ", out_text)
+    out_text = re.sub(r"\s+([.,;:!?])", r"\1", out_text)
+    return out_text.strip(), points
 
 
 def run(args: dict[str, Any]) -> str:
@@ -530,15 +729,18 @@ def run(args: dict[str, Any]) -> str:
         flush=True,
     )
 
-    image_b64, source_label = _capture_screen(scope, app or None)
+    image_b64, source_label, geo = _capture_screen(scope, app or None)
     print(
         f"[read_screen] captured {source_label} "
-        f"({len(image_b64) * 3 // 4 // 1024} KB jpeg, base64={len(image_b64) // 1024} KB)",
+        f"({len(image_b64) * 3 // 4 // 1024} KB jpeg, base64={len(image_b64) // 1024} KB) "
+        f"image={geo.image_w}x{geo.image_h} "
+        f"source=({geo.source_x},{geo.source_y},{geo.source_w}x{geo.source_h}) "
+        f"pointable={geo.pointable}",
         flush=True,
     )
 
     prefs_hint = _wiki_prefs_hint(Wiki())
-    prompt = _build_prompt(question, prefs_hint, source_label)
+    prompt = _build_prompt(question, prefs_hint, source_label, geo)
 
     llm = get_provider()
     print(
@@ -562,7 +764,22 @@ def run(args: dict[str, Any]) -> str:
         )
 
     print(f"[read_screen] reply={reply[:120]!r}…", flush=True)
-    return reply or (
+
+    # Parse [POINT:x,y|label] markers, translate to screen pixels, stash
+    # for ``main.py`` to broadcast (skill runs in a worker thread and
+    # can't ``await`` the bus directly).
+    cleaned, points = _extract_and_translate_points(reply, geo)
+    if points:
+        print(
+            f"[read_screen] {len(points)} pointing hint(s): "
+            + ", ".join(
+                f"({p['x']},{p['y']}|{p['label'] or '?'})" for p in points
+            ),
+            flush=True,
+        )
+    _stash_points(points)
+
+    return cleaned or (
         "I looked at your screen but couldn't make out an answer to that."
     )
 

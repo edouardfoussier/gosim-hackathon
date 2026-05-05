@@ -27,6 +27,7 @@ from .config import config
 from .memory import Wiki
 from .planner import Planner
 from .skills import analyze_email as _analyze_email
+from .skills import read_screen as _read_screen
 from .skills.registry import SKILLS, call as call_skill
 from .voice.realtime import (
     RealtimeSession,
@@ -299,6 +300,14 @@ async def voice_tool(req: VoiceToolRequest) -> dict[str, Any]:
 
     if req.name == "analyze_email" and ok:
         await bus.broadcast_verdict_if_any()
+    if req.name == "read_screen" and ok:
+        # Fan out any [POINT:x,y|label] hints emitted by GLM-4.5V into
+        # the spoken reply; the overlay (PyQt6 PointerOverlay) and the
+        # in-browser arrow both subscribe and animate to the target.
+        for pt in _read_screen.pop_last_points():
+            await bus.broadcast_point(
+                int(pt["x"]), int(pt["y"]), pt.get("label")
+            )
 
     return {"call_id": req.call_id or "", "ok": ok, "output": output}
 
@@ -337,6 +346,11 @@ async def plan_and_run(req: PlanRunRequest) -> dict[str, Any]:
                 followup = _analyze_email.peek_followup()
                 if followup and followup.get("prompt_user"):
                     followup_prompt = followup["prompt_user"]
+            if step.skill == "read_screen":
+                for pt in _read_screen.pop_last_points():
+                    await bus.broadcast_point(
+                        int(pt["x"]), int(pt["y"]), pt.get("label")
+                    )
         except Exception as exc:  # noqa: BLE001
             results.append(
                 {"skill": step.skill, "args": step.arguments, "error": str(exc)}
@@ -416,6 +430,11 @@ async def ws_endpoint(ws: WebSocket) -> None:
                         # Money-shot bridge: when ``analyze_email`` finishes,
                         # fan out the verdict to every overlay subscriber so
                         # the warning halo lights up automatically.
+                        if step.skill == "read_screen":
+                            for pt in _read_screen.pop_last_points():
+                                await bus.broadcast_point(
+                                    int(pt["x"]), int(pt["y"]), pt.get("label")
+                                )
                         if step.skill == "analyze_email":
                             await bus.broadcast_verdict_if_any()
                             # Chained follow-up (Upgrade A): if the verdict

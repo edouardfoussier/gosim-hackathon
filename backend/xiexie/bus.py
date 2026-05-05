@@ -90,6 +90,22 @@ async def broadcast_alert(level: str, message: str) -> None:
     await _fanout({"type": "alert", "level": level, "message": message})
 
 
+async def broadcast_point(x: int, y: int, label: str | None = None) -> None:
+    """Fan out a ``point`` frame so the pointer overlay (PyQt6 ghost
+    cursor) and the in-browser arrow can highlight ``(x, y)`` on the
+    user's screen.
+
+    Coordinates are **global macOS screen pixels** (top-left origin),
+    already translated from the captured image's coordinate space by
+    ``read_screen``. The browser caps a frontend-only "point" inside
+    its viewport when needed; the native overlay paints anywhere.
+    """
+    payload: dict[str, Any] = {"type": "point", "x": int(x), "y": int(y)}
+    if label:
+        payload["label"] = label
+    await _fanout(payload)
+
+
 async def broadcast_working(state: str, label: str | None = None) -> None:
     """Fan out a ``working`` frame so subscribers can show a thinking
     indicator while the agent is silently busy (vision call, scam
