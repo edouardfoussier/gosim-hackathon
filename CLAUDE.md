@@ -358,6 +358,44 @@ Primary demo runs against `data/demo/inbox.json` for full reproducibility.
 For Q&A robustness, Edouard also plants a real test email in his Mail.app
 the night before; we can swap to Mail.app live if a judge asks.
 
+### 2026-05-05 (early afternoon) — Wire 3 free-tier external APIs
+Audit of the 2026 landscape (FTC API, urlscan.io, PhishTank/OpenPhish,
+URLhaus, Google Safe Browsing, VirusTotal, EmailRep) chose the three with
+the best signal-per-effort ratio for the hackathon:
+- **urlscan.io** (`backend/xiexie/external/urlscan.py`) — search endpoint
+  cross-references previous malicious scans; submit_and_wait kept behind a
+  flag (30 s polling not affordable on stage).
+- **Google Safe Browsing v4** (`safe_browsing.py`) — instant binary signal,
+  free for non-commercial.
+- **EmailRep.io** (`email_rep.py`) — sender reputation + SPF/DMARC + domain
+  age + breach signals, free tier no-key fallback.
+All three degrade gracefully (return `available: False`) when keys absent or
+APIs unreachable — the mock fixture for our demo URL stays authoritative,
+so the Station F demo never depends on the network.
+
+### 2026-05-05 (early afternoon) — Pitch positioning: do NOT name competitors
+Edouard's call. We're aware of Ask Grace, ElderShield, PhishNet,
+Guardian Angel, VerdictMail (see `docs/competitors.md` for the internal
+record + Q&A backup answers), but the public pitch focuses on the
+positive Xiexie story rather than naming prior art. If a judge asks
+"isn't this Ask Grace?" we have prepared answers in `docs/competitors.md`.
+
+### 2026-05-05 (early afternoon) — Best-of-N pursuit on visual indicator
+Two parallel paths so we never lack a fallback for the warning UX:
+- **`main`**: Status Halo in the existing Next.js panel + (optional J2
+  morning) Chrome extension banner — both proven, low-risk, polished.
+- **`feat/native-overlay`** (worktree): a sub-agent prototypes a true
+  Clicky-style macOS overlay (PyQt6 → PyObjC → Tauri+nspanel, in that
+  order of feasibility). If it lands by J2 morning, we merge for the wow
+  factor. If it doesn't, the `main` fallback is already shipping.
+
+### 2026-05-05 (early afternoon) — Three prior-art research sub-agents in flight
+Read-only research on Guardian Angel, VerdictMail, PhishNet runs in
+parallel; reports written to `/tmp/xiexie-research/*-report.md`. We
+integrate findings on the next pass (likely J1 evening) — explicitly
+*after* the APIs are wired, since the reports may suggest prompt or
+heuristic upgrades that build on the existing skill surface.
+
 ---
 
 ## 11. Bug log (append only, prevent re-introducing)
@@ -366,6 +404,21 @@ the night before; we can swap to Mail.app live if a judge asks.
 > redo the same hour of debugging.
 
 - (none yet)
+
+---
+
+## 11b. Background work — sub-agents currently running
+
+> Updated when sub-agents are launched / complete. Reports land under
+> `/tmp/xiexie-research/` (research) or in the `feat/native-overlay`
+> worktree (implementation).
+
+| Sub-agent          | Mode    | Output location                                    | State    |
+|--------------------|---------|----------------------------------------------------|----------|
+| Native overlay     | code    | branch `feat/native-overlay` + `OVERLAY_README.md` | running  |
+| Guardian Angel     | readonly| `/tmp/xiexie-research/guardian-angel-report.md`    | running  |
+| VerdictMail        | readonly| `/tmp/xiexie-research/verdictmail-report.md`       | running  |
+| PhishNet           | readonly| `/tmp/xiexie-research/phishnet-report.md`          | running  |
 
 ---
 

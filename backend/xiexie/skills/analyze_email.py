@@ -28,6 +28,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from ..external import email_rep
 from ..llm import get_provider
 from ..memory import Wiki
 from . import _inbox, check_url as _check_url, search_scam_intel as _intel
@@ -37,6 +38,8 @@ ANALYZE_SYSTEM = """\
 You are Xiexie's email forensics agent. The user is a senior. You receive:
 - the email object (headers, sender, subject, body, links)
 - the structured report from `check_url` for each link in the email
+  (now enriched with Google Safe Browsing + urlscan.io history when configured)
+- the EmailRep.io reputation for the sender address
 - 3 web-search hits from `search_scam_intel`
 - the user's wiki/scam_alerts.md (known active patterns)
 - the user's wiki/accounts.md (their *real* accounts, for sender comparison)
@@ -67,11 +70,15 @@ Hard rules:
 
 
 def _build_user_prompt(message: dict[str, Any], url_reports: list[dict[str, Any]],
-                       intel: list[dict[str, str]], wiki: Wiki) -> str:
+                       intel: list[dict[str, str]], sender_rep: dict[str, Any],
+                       wiki: Wiki) -> str:
     parts: list[str] = []
     parts.append("## EMAIL\n```json\n" + json.dumps(message, indent=2) + "\n```")
     if url_reports:
         parts.append("## URL FORENSICS\n```json\n" + json.dumps(url_reports, indent=2) + "\n```")
+    if sender_rep.get("available"):
+        parts.append("## SENDER REPUTATION (EmailRep.io)\n```json\n"
+                     + json.dumps(sender_rep, indent=2) + "\n```")
     if intel:
         parts.append("## WEB SCAM INTEL\n```json\n" + json.dumps(intel, indent=2) + "\n```")
 
@@ -88,21 +95,25 @@ def _build_user_prompt(message: dict[str, Any], url_reports: list[dict[str, Any]
 
 def analyze(message: dict[str, Any]) -> dict[str, Any]:
     """Pure function — no I/O on the message — returns the verdict dict."""
-    # 1. URL forensics for each link
+    # 1. URL forensics for each link (enriched with GSB + urlscan inside check_url)
     url_reports: list[dict[str, Any]] = []
     for link in (message.get("links") or [])[:5]:
         url = link.get("url")
         if url:
             url_reports.append(_check_url.fetch_struct(url))
 
-    # 2. One scam-intel search keyed by sender brand + 'phishing'
+    # 2. EmailRep on the sender
+    sender_addr = message.get("from", {}).get("address") or ""
+    sender_rep = email_rep.lookup(sender_addr) if sender_addr else {"available": False}
+
+    # 3. One scam-intel search keyed by sender brand + 'phishing'
     sender_brand = (message.get("from", {}).get("name") or message.get("subject") or "").lower()
     pattern_hint = " ".join(sender_brand.split()[:3]) + " phishing"
     intel = _intel.search(pattern_hint)
 
-    # 3. GLM verdict
+    # 4. GLM verdict
     wiki = Wiki()
-    user_msg = _build_user_prompt(message, url_reports, intel, wiki)
+    user_msg = _build_user_prompt(message, url_reports, intel, sender_rep, wiki)
     llm = get_provider()
     resp = llm.chat(
         messages=[
@@ -136,6 +147,7 @@ def analyze(message: dict[str, Any]) -> dict[str, Any]:
 
     verdict["_evidence"] = {
         "url_reports": url_reports,
+        "sender_reputation": sender_rep,
         "intel": intel,
         "message_id": message.get("id"),
     }

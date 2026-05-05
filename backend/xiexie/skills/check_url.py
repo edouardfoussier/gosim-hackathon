@@ -38,6 +38,7 @@ from urllib.parse import urlparse
 
 import httpx
 
+from ..external import safe_browsing, urlscan as urlscan_api
 from .registry import Skill, register
 
 # ── demo-time mock fixtures ───────────────────────────────────────────────
@@ -134,12 +135,46 @@ def _real_fetch(url: str, timeout: float = 6.0) -> dict[str, Any]:
     }
 
 
+def _enrich_with_external(url: str, data: dict[str, Any]) -> dict[str, Any]:
+    """Add Google Safe Browsing + urlscan.io signals when keys are configured.
+
+    These are *additive*; the mock fixture (for our demo URL) and the no-JS
+    fetch path (for everything else) remain authoritative for the structured
+    forensic fields.
+    """
+    gsb = safe_browsing.lookup(url)
+    if gsb.get("available"):
+        data["safe_browsing"] = gsb
+        if gsb.get("malicious") and "verdict_features" in data:
+            data["verdict_features"].append(
+                f"Google Safe Browsing flagged: {', '.join(gsb.get('threats', []))}"
+            )
+
+    scans = urlscan_api.search(url)
+    if scans.get("available"):
+        data["urlscan_search"] = {
+            "total_recent_scans": scans.get("total_recent_scans"),
+            "malicious_scans": scans.get("malicious_scans"),
+        }
+        mal = scans.get("malicious_scans") or []
+        if mal and "verdict_features" in data:
+            categories = {c for s in mal for c in s.get("categories", [])}
+            cat_str = (", ".join(sorted(categories))) or "scam"
+            data["verdict_features"].append(
+                f"urlscan.io has {len(mal)} prior malicious scan(s) of this domain ({cat_str})"
+            )
+
+    return data
+
+
 def run(args: dict[str, Any]) -> str:
     url = str(args.get("url", "")).strip()
     if not url:
         return "I need a URL to check."
 
     data = _mock_lookup(url) or _real_fetch(url)
+    data.setdefault("verdict_features", [])
+    data = _enrich_with_external(url, data)
     # Short human-friendly summary; planner gets the structured ``data``
     # via the conversational tool-call result text.
     summary_lines = [f"Checked {url} ({data.get('source')})"]
@@ -158,6 +193,18 @@ def run(args: dict[str, Any]) -> str:
         summary_lines.append("Forensic features:")
         for f in data["verdict_features"]:
             summary_lines.append(f"  - {f}")
+    if data.get("safe_browsing", {}).get("available"):
+        gsb = data["safe_browsing"]
+        verdict = "malicious" if gsb.get("malicious") else "clean"
+        summary_lines.append(
+            f"Google Safe Browsing: {verdict}"
+            + (f" ({', '.join(gsb.get('threats', []))})" if gsb.get("threats") else "")
+        )
+    if data.get("urlscan_search", {}).get("total_recent_scans") is not None:
+        scans = data["urlscan_search"]
+        n = len(scans.get("malicious_scans") or [])
+        total = scans.get("total_recent_scans") or 0
+        summary_lines.append(f"urlscan.io history: {n}/{total} prior scans flagged malicious")
     if data.get("error"):
         summary_lines.append(f"(fetch error: {data['error']})")
     return "\n".join(summary_lines)
@@ -165,7 +212,9 @@ def run(args: dict[str, Any]) -> str:
 
 def fetch_struct(url: str) -> dict[str, Any]:
     """Same as ``run`` but returns the structured dict — used by analyze_email."""
-    return _mock_lookup(url) or _real_fetch(url)
+    data = _mock_lookup(url) or _real_fetch(url)
+    data.setdefault("verdict_features", [])
+    return _enrich_with_external(url, data)
 
 
 SKILL = register(

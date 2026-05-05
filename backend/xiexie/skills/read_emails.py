@@ -15,6 +15,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from ..external import email_rep
 from ..memory import Wiki
 from . import _inbox
 from .registry import Skill, register
@@ -67,6 +68,19 @@ def _suspicion_signals(msg: dict[str, Any], known_domains: set[str]) -> list[str
     body = msg.get("body_text") or ""
     if URGENT_RE.search(body) and "social security" in body.lower():
         signals.append("asks for Social Security Number")
+
+    # EmailRep enrichment (free tier, graceful no-op if rate-limited)
+    sender_addr = msg.get("from", {}).get("address")
+    if sender_addr:
+        rep = email_rep.lookup(sender_addr)
+        if rep.get("available"):
+            if rep.get("suspicious"):
+                signals.append("EmailRep flags this sender as suspicious")
+            if rep.get("reputation") == "low":
+                signals.append("EmailRep gives this sender a low reputation score")
+            domain_age = rep.get("domain_age_days")
+            if isinstance(domain_age, int) and domain_age < 60:
+                signals.append(f"sender domain registered {domain_age} days ago (very new)")
 
     return signals
 
