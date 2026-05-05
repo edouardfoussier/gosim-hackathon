@@ -203,6 +203,46 @@ def bus_logger():
     return logging.getLogger("xiexie.voice.realtime")
 
 
+class VoiceSpeakingRequest(BaseModel):
+    """Payload for ``POST /voice/speaking`` — drives the soundwave overlay.
+
+    Emitted ~10×/s by the browser realtime client (``app/lib/realtime.ts``)
+    while Marin is producing audio. ``level`` is the RMS amplitude on a
+    ``0..1`` scale; the field is optional so the simplest "Marin is /
+    isn't speaking" wiring (one ``start`` + one ``stop``) still works
+    and the overlay falls back to its procedural sine animation.
+    """
+
+    state: str  # "start" | "stop"
+    level: float | None = None
+
+
+@app.post("/voice/speaking", status_code=204)
+async def voice_speaking(req: VoiceSpeakingRequest):
+    """Forward a speaking-state event to every WS subscriber.
+
+    Internal/loopback only — the browser hits this from the same machine
+    while gpt-realtime audio plays. No auth gate (the FastAPI process
+    binds 127.0.0.1 in production via uvicorn's ``--host`` arg).
+    """
+    state = (req.state or "").strip().lower()
+    if state not in {"start", "stop"}:
+        raise HTTPException(
+            status_code=422, detail=f"unknown state {state!r}; expected start|stop"
+        )
+
+    level = req.level
+    if level is not None:
+        try:
+            level = max(0.0, min(1.0, float(level)))
+        except (TypeError, ValueError):
+            level = None
+
+    await bus.broadcast_speaking(state, level)
+    # 204 No Content — nothing to return; the WS push is the side-effect.
+    return None
+
+
 class VoiceToolRequest(BaseModel):
     name: str
     arguments: dict[str, Any] = {}

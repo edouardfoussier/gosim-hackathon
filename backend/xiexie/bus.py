@@ -64,14 +64,12 @@ def active_count() -> int:
     return len(_active_clients)
 
 
-async def broadcast_alert(level: str, message: str) -> None:
-    """Fan out an alert frame to every connected client.
+async def _fanout(payload: dict[str, Any]) -> None:
+    """Send ``payload`` to every connected client; drop any that error.
 
-    Any client whose ``send_json`` raises is removed from the registry —
-    the next iteration stays clean even if the socket layer never told us
-    the peer disappeared.
+    Internal helper shared by :func:`broadcast_alert` and
+    :func:`broadcast_speaking` (and any future typed broadcaster).
     """
-    payload = {"type": "alert", "level": level, "message": message}
     dead: list[Any] = []
     for client in list(_active_clients):
         try:
@@ -80,6 +78,35 @@ async def broadcast_alert(level: str, message: str) -> None:
             dead.append(client)
     for client in dead:
         _active_clients.discard(client)
+
+
+async def broadcast_alert(level: str, message: str) -> None:
+    """Fan out an alert frame to every connected client.
+
+    Any client whose ``send_json`` raises is removed from the registry —
+    the next iteration stays clean even if the socket layer never told us
+    the peer disappeared.
+    """
+    await _fanout({"type": "alert", "level": level, "message": message})
+
+
+async def broadcast_speaking(state: str, level: float | None = None) -> None:
+    """Fan out a ``speaking`` frame to every connected client.
+
+    ``state`` is ``"start"`` or ``"stop"``; ``level`` is an optional
+    RMS amplitude in ``0..1`` that the native overlay uses to drive its
+    soundwave bars (omit for procedural fallback).
+
+    The browser's realtime client posts to ``POST /voice/speaking`` ~10×
+    per second while gpt-realtime is producing audio; we forward straight
+    through with no batching — the WS payload is tiny (~50 bytes) and
+    smoothing happens on the consumer (``SoundwaveOverlay`` lerps its
+    bars toward the target level).
+    """
+    payload: dict[str, Any] = {"type": "speaking", "state": state}
+    if level is not None:
+        payload["level"] = level
+    await _fanout(payload)
 
 
 async def broadcast_verdict_if_any() -> bool:
