@@ -228,6 +228,62 @@ still fires on the overlay.
 
 ---
 
+## 3b. Planting the phishing email in Mail.app
+
+The recorded video runs against the *real* macOS Mail.app inbox
+(``MAIL_SOURCE=mailapp``). For the analysis beat to land, Margaret's
+inbox needs one unread "Aetna" phishing email Edouard plants the night
+before. The fixture (``data/demo/inbox.json``) stays as a backup —
+flip ``MAIL_SOURCE=demo`` in ``.env`` and restart uvicorn to switch.
+
+### Step 1 — send the bait to yourself
+
+From any free webmail account (Outlook, iCloud, Gmail) that is *not*
+Edouard's primary account, send a message to whatever inbox Mail.app is
+configured to read:
+
+| Field | Value |
+|---|---|
+| **From display name** | ``Aetna Customer Service`` |
+| **Subject** | ``URGENT: Your Aetna coverage expires TODAY — verify identity now`` |
+| **Body** | (paste the body of ``msg-003`` from ``data/demo/inbox.json``, including the ``aetnna-secure.com`` URL) |
+
+Display-name spoofing is the only ingredient our cousin-domain heuristic
+needs — the actual sending domain doesn't have to be ``aetnna-secure.com``,
+and trying to spoof one will land you in the recipient's spam folder.
+The body containing the typosquatted URL is what ``analyze_email`` chews
+on (URL forensics + Cialdini extraction + GLM verdict).
+
+### Step 2 — make sure it's UNREAD when you press record
+
+If you previewed the email while testing, open Mail.app and right-click
+→ **Mark as Unread** (or ``⇧⌘U``). The ``read_emails`` skill only ships
+unread messages; a "read" email is invisible to it.
+
+### Step 3 — verify before each take
+
+```bash
+# Counts unread inbox messages without opening Mail.app to the foreground.
+osascript -e 'tell application "Mail" to count messages of inbox whose read status is false'
+# Expect: a number ≥ 1 (the phishing email).
+```
+
+If the answer is ``0``, mark the email unread again before recording.
+
+A second sanity check goes through Xiexie's own probe:
+
+```bash
+cd /Users/edouardfoussier/code/gosim-hack/backend
+uv run python -m xiexie.skills._mail_app status
+# Expect: {"available": true, "error": null, "inbox_count": "<n>"}
+```
+
+If ``available`` is ``false``, see §1 of ``MACOS_PERMS.md`` (or just
+toggle ``MAIL_SOURCE=demo`` in ``.env`` and restart uvicorn for the
+fixture-only path — the rest of the demo is identical).
+
+---
+
 ## 4. Sanity checklist before you record / pitch
 
 Run through this once just before the take. Each line should be a
