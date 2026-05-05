@@ -19,3 +19,4 @@ last_updated_by: agent
 | accounts.md           | Online accounts    | 2026-05-04T18:00:00Z | high       |
 | preferences.md        | Preferences        | 2026-05-05T07:55:00Z | high       |
 | recurring_tasks.md    | Recurring tasks    | 2026-05-04T20:00:00Z | high       |
+| scam_alerts.md        | Scam alerts        | 2026-05-04T22:00:00Z | high       |

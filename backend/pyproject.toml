@@ -29,8 +29,11 @@ dependencies = [
     # screenshots
     "pillow>=10",
     "mss>=10",
+    # scam-shield deps
+    "beautifulsoup4>=4.12",
     # browser automation (heavy — install separately if needed)
     # "browser-use>=0.1.40",
+    # "playwright>=1.49",
 ]
 
 [project.optional-dependencies]

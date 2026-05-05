@@ -39,27 +39,6 @@ def _stub_run(skill_name: str, friendly: str):
     return _run
 
 
-# ── read_emails ───────────────────────────────────────────────────────────
-register(
-    Skill(
-        name="read_emails",
-        description="Read recent emails aloud (Mail.app or Gmail). Filter by sender, urgency, or 'today'.",
-        parameters={
-            "type": "object",
-            "properties": {
-                "filter": {"type": "string", "description": "Optional: 'today', 'from Lisa', 'urgent', etc."},
-                "limit": {"type": "integer", "default": 5},
-            },
-        },
-        run=_stub_run(
-            "read_emails",
-            "I'll read your emails for you in a moment — I'm still learning that one. Adding it to my list.",
-        ),
-        tags=["email", "stub"],
-    )
-)
-
-
 # ── zoom_text ─────────────────────────────────────────────────────────────
 register(
     Skill(

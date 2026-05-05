@@ -1,0 +1,74 @@
+{
+  "$schema": "https://xiexie.local/schema/inbox.v1.json",
+  "owner": "m.chen.1951@gmail.com",
+  "fetched_at": "2026-05-05T08:42:00-07:00",
+  "messages": [
+    {
+      "id": "msg-001",
+      "from": {
+        "name": "Lisa Chen-Burrows",
+        "address": "lisa.chen@example.co.uk",
+        "domain": "example.co.uk"
+      },
+      "to": ["m.chen.1951@gmail.com"],
+      "subject": "Landing at SFO at 4 — see you soon ❤️",
+      "received_at": "2026-05-05T07:14:00-07:00",
+      "read": false,
+      "archived": false,
+      "headers": {
+        "Return-Path": "<lisa.chen@example.co.uk>",
+        "Received-SPF": "pass",
+        "Authentication-Results": "spf=pass dkim=pass dmarc=pass"
+      },
+      "body_text": "Hi Mom — I've just boarded BA285. Should land around 4pm your time. Tom and the kids send hugs. Don't worry about picking us up, we'll grab a Lyft. xx Lisa",
+      "links": []
+    },
+
+    {
+      "id": "msg-002",
+      "from": {
+        "name": "Aetna Member Services",
+        "address": "noreply@aetna.com",
+        "domain": "aetna.com"
+      },
+      "to": ["m.chen.1951@gmail.com"],
+      "subject": "Your Aetna plan renewal — open enrollment closes May 15",
+      "received_at": "2026-05-03T09:02:00-07:00",
+      "read": true,
+      "archived": false,
+      "headers": {
+        "Return-Path": "<bounce-aetna@aetna.com>",
+        "Received-SPF": "pass",
+        "Authentication-Results": "spf=pass dkim=pass dmarc=pass",
+        "List-Unsubscribe": "<https://www.aetna.com/unsubscribe>"
+      },
+      "body_text": "Dear member, your annual open enrollment window closes May 15, 2026. To review or renew your plan, please log in to your account at aetna.com/member. If you have questions, call (800) 872-3862. — Aetna Member Services",
+      "links": [
+        { "text": "log in to your account", "url": "https://www.aetna.com/member" }
+      ]
+    },
+
+    {
+      "id": "msg-003",
+      "from": {
+        "name": "Aetna Customer Service",
+        "address": "renewal-secure@aetnna-secure.com",
+        "domain": "aetnna-secure.com"
+      },
+      "to": ["m.chen.1951@gmail.com"],
+      "subject": "URGENT: Your Aetna coverage expires TODAY — verify identity now",
+      "received_at": "2026-05-05T06:31:00-07:00",
+      "read": false,
+      "archived": false,
+      "headers": {
+        "Return-Path": "<no-reply@mailgrid-bulk.ru>",
+        "Received-SPF": "fail (sender IP not authorized)",
+        "Authentication-Results": "spf=fail dkim=none dmarc=fail"
+      },
+      "body_text": "Dear Margaret Chen, Our records show your Aetna Choice POS II plan will be CANCELLED today, May 5, 2026, unless you re-verify your identity. Please click the secure link below within 24 hours to avoid loss of coverage. You will need: full name, date of birth, Social Security Number, member ID, and credit card on file. Failure to act will result in immediate cancellation of all benefits.\n\nClick here to verify: http://aetnna-secure.com/r/cgxq?u=mchen\n\nDo NOT reply to this email — for security please use the link only. — Aetna Customer Service Team",
+      "links": [
+        { "text": "Click here to verify", "url": "http://aetnna-secure.com/r/cgxq?u=mchen" }
+      ]
+    }
+  ]
+}

@@ -1,7 +1,6 @@
 # Xiexie 谢谢
 
-> A voice-first computer-use agent for seniors that learns its user, one
-> conversation at a time.
+> The AI grandchild that protects, remembers, and never sleeps.
 
 **GOSIM Agentic Hackathon 2026 · STATION F · Paris**
 **Team: Xiexie (solo) · targeting Z.AI Innovation Award**
@@ -10,50 +9,65 @@
 
 ## TL;DR
 
-Xiexie sits on a senior's Mac, listens for plain-English voice commands, and
-**does** things — opens apps, finds files, fills forms, replies to emails,
-sets reminders. Nothing new there.
+Last year, US seniors lost **$3.4 billion** to online scams (FTC). Xiexie
+sits on a senior's Mac as a voice-first AI grandchild that:
 
-What is new: Xiexie's memory is a **markdown wiki it maintains itself**
-(Andrej Karpathy's LLM-Wiki pattern, April 2026). Every session, the agent
-learns Margaret a little more — her doctor's name, where she keeps her
-invoices, what time her eyes get tired. The wiki is plain text. Margaret
-owns it. She can read and edit it. It compounds across sessions instead of
-resetting on every query.
+1. **Reads inbound emails out loud** and flags anything that looks unusual.
+2. **Forensically analyses suspicious emails** — multi-tool reasoning over
+   sender headers, sandboxed link captures, and live web scam intelligence,
+   composed by GLM-4.6 into a graded plain-English verdict.
+3. **Acts on Margaret's behalf** — archives the scam, drafts a heads-up
+   email to her daughter Lisa, opens apps, sets reminders, makes text bigger.
+4. **Learns Margaret a little more** after every conversation, via
+   Andrej Karpathy's [LLM-Wiki pattern](https://newclawtimes.com/articles/karpathy-llm-knowledge-bases-agent-memory-beyond-rag) — plain markdown the user owns, that compounds across sessions instead of resetting.
 
-> "Today, computers expect humans to learn them.
-> Xiexie flips it: the computer learns the human."
+> "When your real grandchild is busy, your computer can be the next best
+> thing. Just say… *Xiexie*."
 
 ---
 
-## The pitch in 5 minutes
+## The pitch in 5 minutes — "Scam Shield"
 
-**Persona:** Margaret, 74, lives alone in California, daughter Lisa in London.
+**Persona:** Margaret, 74, Palo Alto. Daughter Lisa in London.
 
 ```
-00:00 ─ "Xiexie, what's on my plate today?"
-        → daily_brief: 3 emails, Lisa's flight at 4pm, EDF bill day
+00:00 ─ Hook (voice-over)
+        "Last year, US seniors lost $3.4 billion to online scams. My
+        grandmother almost lost three thousand. This is for her."
 
-00:45 ─ "Find my last EDF bill, how much was it?"
-        → mdfind → opens PDF → vision reads "€87"
+00:30 ─ "Xiexie, did I get any new emails?"
+        → read_emails: 3 unread. One looks unusual.
+          "Want me to take a closer look?"
 
-01:45 ─ "Read me the Aetna email"
-        → reads aloud → "want me to do the renewal together?"
+01:30 ─ "Yes please."  ← THE SHOWPIECE
+        → analyze_email runs three tools in parallel, UI shows live timeline:
+          ✓ sender headers (SPF/DKIM/DMARC fail)
+          ✓ URL sandbox (4-hop redirect to .ru → netlify fake login)
+          ✓ web scam intel (FTC alert 2026-04-28 matches this template)
 
-02:15 ─ "Yes please"
-        → opens form → asks fields in plain English →
-          wiki provides defaults → Margaret corrects ("Dr. Smith now") →
-          ★ wiki re-renders live with the new fact ★ → submits
+03:00 ─ Verdict Card animates in:
+        VERDICT: phishing  (confidence: high)
+        SIGNS:
+          1. Sender domain `aetnna-secure.com` typosquats `aetna.com`.
+          2. Link redirects 4 hops, asks for SSN + credit card.
+          3. Pattern matches FTC alert from last week.
+        RECOMMENDED:
+          - Don't click. Don't pay.
+          - Archive the email.
+          - Tell Lisa.
 
-03:30 ─ "Set a reminder for 3:30pm to leave for SFO"
-        → osascript Reminders → done
+03:45 ─ "Yes."
+        → archive_email + report_to_family (mailto: drafted to Lisa)
 
-04:00 ─ "My eyes are tired, make this bigger"
-        → zoom → done
+04:00 ─ Wiki banner re-renders:
+        scam_alerts.md  +1 entry · family.md  "alerted Lisa 13:23"
 
-04:30 ─ "Xiexie."
-        → linter pass: "Learned: Dr. Smith ; Lisa visits monthly ;
-          prefers larger text after 2pm"
+04:15 ─ "Make this bigger." + "Open Mail."
+        → zoom_text + open_app — breadth in <10 s
+
+04:45 ─ Close
+        "Xiexie. The AI grandchild that protects, remembers, and never
+        sleeps. Open source. Local-first. Built on GLM-4.6."
 ```
 
 ---
@@ -63,17 +77,28 @@ resetting on every query.
 ```
 voice in → faster-whisper (local)
        ↓
-   Planner (GLM-4.6) ←── Wiki Reader (Karpathy LLM-Wiki, markdown)
+   Planner (GLM-4.6) ◀── Wiki Reader (Karpathy LLM-Wiki, markdown)
        ↓
-   Skill registry ─────► open_app · find_file · read_emails ·
-                         set_reminder · zoom_text · login_site ·
-                         daily_brief
-       ↓                       ↓
-   no skill matched?    skill executes (browser-use, AppleScript, mdfind)
-       ↓                       ↓
-   log to unhandled_asks.md    Wiki Updater + Linter ←── data/raw/
-       ↓                       ↓
-       └────────► Kokoro TTS (local, warm voice) → spoken reply
+   ┌─── Tier-A · Scam Shield ──────────────────────────────────────┐
+   │                                                                │
+   │   read_emails  ─►  analyze_email  ◀─  search_scam_intel       │
+   │                          │            (Tavily / fixture)      │
+   │                          ◀────────  check_url                 │
+   │                                     (no-JS fetch, redirect    │
+   │                                      chain, form fields)      │
+   │                          ▼                                    │
+   │                   verdict (graded) ─►  archive_email          │
+   │                                       report_to_family        │
+   └────────────────────────────────────────────────────────────────┘
+   ┌─── Tier-B · Breadth ───────────────────────────────────────────┐
+   │   open_app · find_file · set_reminder · zoom_text             │
+   └────────────────────────────────────────────────────────────────┘
+       ↓                                          ↓
+   no skill matched?                       Wiki Updater + Linter ◀── data/raw/
+       ↓                                          ↓
+   log to unhandled_asks.md                  scam_alerts.md auto-refresh
+       ↓                                          ↓
+       └──────────► Kokoro TTS (local) ──────────► spoken reply
 ```
 
 See [`CLAUDE.md`](./CLAUDE.md) for the dev harness, scope, and risk log.
@@ -85,11 +110,11 @@ See [`WIKI_SCHEMA.md`](./WIKI_SCHEMA.md) for the runtime memory schema.
 
 | Criterion (20% each) | How Xiexie scores                                                                  |
 |----------------------|------------------------------------------------------------------------------------|
-| **Innovation**       | Computer-use + LLM-Wiki memory + senior-first UX — combo unseen in the 46 teams    |
-| **Technical Depth**  | Agent loop · vision · tool-use · self-curating markdown memory · linter agent      |
-| **Completeness**     | 7 working skills + visible memory updates + voice round-trip end-to-end            |
-| **Practicality**     | Real digital divide problem, real persona, real demo on real macOS                 |
-| **Presentation**     | Emotional opening (grandmother), live wiki growth on screen, GLM as backbone       |
+| **Innovation**       | Multi-tool scam forensics + LLM-Wiki memory + voice grandchild — combo unseen in the 46 teams |
+| **Technical Depth**  | Composite agent: header forensics · URL sandbox · web grounding · GLM verdict · self-curating markdown memory · weekly linter |
+| **Completeness**     | 9 working skills + Verdict Card + visible memory updates + voice round-trip       |
+| **Practicality**     | $3.4B/yr elder-fraud problem, real persona, real macOS demo + Mail.app backup     |
+| **Presentation**     | Emotional opening (grandmother story), Verdict Card showpiece, GLM as backbone     |
 
 ---
 
@@ -98,6 +123,7 @@ See [`WIKI_SCHEMA.md`](./WIKI_SCHEMA.md) for the runtime memory schema.
 - **LLM:** [GLM-4.6](https://z.ai) (Z.AI), GLM-4V for vision · OpenAI fallback for dev
 - **Voice:** [faster-whisper](https://github.com/SYSTRAN/faster-whisper) (STT) · [Kokoro](https://github.com/hexgrad/kokoro) (TTS)
 - **Computer use:** [`browser-use`](https://github.com/browser-use/browser-use) · pyautogui · AppleScript via `osascript` · `mdfind`
+- **Scam forensics:** httpx (no-JS URL sandbox) · [Tavily Search](https://tavily.com) (web scam intel, fixture fallback) · header-auth heuristics
 - **Memory:** plain markdown (Karpathy LLM-Wiki, [Apr 2026](https://newclawtimes.com/articles/karpathy-llm-knowledge-bases-agent-memory-beyond-rag))
 - **Backend:** Python 3.12 · FastAPI · WebSockets
 - **Frontend:** Next.js 15 · shadcn/ui · Tailwind
@@ -117,13 +143,14 @@ See [`WIKI_SCHEMA.md`](./WIKI_SCHEMA.md) for the runtime memory schema.
 │       ├── main.py       # FastAPI + WebSockets
 │       ├── llm/          # provider abstraction (GLM + OpenAI fallback)
 │       ├── voice/        # STT + TTS
-│       ├── skills/       # 7 named skills + registry
+│       ├── skills/       # Tier-A (scam-shield) + Tier-B (breadth) + stubs
 │       ├── memory/       # wiki R/W + linter
 │       └── planner/      # voice → skill selection
 ├── app/                  # Next.js overlay UI
 │   ├── app/              # routes
-│   └── components/       # voice button, transcript, wiki banner
+│   └── components/       # voice button, transcript, verdict card, wiki banner
 └── data/
+    ├── demo/             # fake inbox fixture for the live demo
     ├── raw/              # immutable transcripts + screenshots + unhandled
     └── wiki/             # the agent's living markdown memory
 ```
