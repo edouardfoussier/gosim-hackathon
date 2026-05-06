@@ -1,193 +1,162 @@
-# Xiexie 谢谢
+Update: April 27, 2026.
 
-> The AI grandchild that protects, remembers, and never sleeps.
+Hi there! I'm Farza, the guy that made Clicky.
 
-**GOSIM Agentic Hackathon 2026 · STATION F · Paris**
-**Team: Xiexie (solo) · targeting Z.AI Innovation Award**
+The existing codebase remains open source. Tinker with it, make it yours, start a company out of it, do whatever you want I don't mind. But, for all the new stuff I'm hacking on, gonna keep it private. To get the latest Clicky, you can go [here](https://www.heyclicky.com/).
 
----
+I also tweeted about this [here](https://x.com/FarzaTV/status/2043402737828962489).
 
-## TL;DR
+Go crazy with this repo!! It's an MIT license.
 
-Last year, US seniors lost **$3.4 billion** to online scams (FTC). Xiexie
-sits on a senior's Mac as a voice-first AI grandchild that:
+# Hi, this is Clicky.
+It's an AI teacher that lives as a buddy next to your cursor. It can see your screen, talk to you, and even point at stuff. Kinda like having a real teacher next to you.
 
-1. **Reads inbound emails out loud** and flags anything that looks unusual.
-2. **Forensically analyses suspicious emails** — multi-tool reasoning over
-   sender headers, sandboxed link captures, and live web scam intelligence,
-   composed by GLM-4.6 into a graded plain-English verdict.
-3. **Acts on Margaret's behalf** — archives the scam, drafts a heads-up
-   email to her daughter Lisa, opens apps, sets reminders, makes text bigger.
-4. **Learns Margaret a little more** after every conversation, via
-   Andrej Karpathy's [LLM-Wiki pattern](https://newclawtimes.com/articles/karpathy-llm-knowledge-bases-agent-memory-beyond-rag) — plain markdown the user owns, that compounds across sessions instead of resetting.
+Download it [here](https://www.clicky.so/) for free.
 
-> "When your real grandchild is busy, your computer can be the next best
-> thing. Just say… *Xiexie*."
+Here's the [original tweet](https://x.com/FarzaTV/status/2041314633978659092) that kinda blew up for a demo for more context.
 
----
+![Clicky — an ai buddy that lives on your mac](clicky-demo.gif)
 
-## The pitch in 5 minutes — "Scam Shield"
+This is the open-source version of Clicky for those that want to hack on it, build their own features, or just see how it works under the hood.
 
-**Persona:** Margaret, 74, Palo Alto. Daughter Lisa in London.
+## Get started with Claude Code
+
+The fastest way to get this running is with [Claude Code](https://docs.anthropic.com/en/docs/claude-code).
+
+Once you get Claude running, paste this:
 
 ```
-00:00 ─ Hook (voice-over)
-        "Last year, US seniors lost $3.4 billion to online scams. My
-        grandmother almost lost three thousand. This is for her."
+Hi Claude.
 
-00:30 ─ "Xiexie, did I get any new emails?"
-        → read_emails: 3 unread. One looks unusual.
-          "Want me to take a closer look?"
+Clone https://github.com/farzaa/clicky.git into my current directory.
 
-01:30 ─ "Yes please."  ← THE SHOWPIECE
-        → analyze_email runs three tools in parallel, UI shows live timeline:
-          ✓ sender headers (SPF/DKIM/DMARC fail)
-          ✓ URL sandbox (4-hop redirect to .ru → netlify fake login)
-          ✓ web scam intel (FTC alert 2026-04-28 matches this template)
+Then read the CLAUDE.md. I want to get Clicky running locally on my Mac.
 
-03:00 ─ Verdict Card animates in:
-        VERDICT: phishing  (confidence: high)
-        SIGNS:
-          1. Sender domain `aetnna-secure.com` typosquats `aetna.com`.
-          2. Link redirects 4 hops, asks for SSN + credit card.
-          3. Pattern matches FTC alert from last week.
-        RECOMMENDED:
-          - Don't click. Don't pay.
-          - Archive the email.
-          - Tell Lisa.
-
-03:45 ─ "Yes."
-        → archive_email + report_to_family (mailto: drafted to Lisa)
-
-04:00 ─ Wiki banner re-renders:
-        scam_alerts.md  +1 entry · family.md  "alerted Lisa 13:23"
-
-04:15 ─ "Make this bigger." + "Open Mail."
-        → zoom_text + open_app — breadth in <10 s
-
-04:45 ─ Close
-        "Xiexie. The AI grandchild that protects, remembers, and never
-        sleeps. Open source. Local-first. Built on GLM-4.6."
+Help me set up everything — the Cloudflare Worker with my own API keys, the proxy URLs, and getting it building in Xcode. Walk me through it.
 ```
 
----
+That's it. It'll clone the repo, read the docs, and walk you through the whole setup. Once you're running you can just keep talking to it — build features, fix bugs, whatever. Go crazy.
 
-## Architecture (one diagram)
+## Manual setup
 
-```
-voice in → faster-whisper (local)
-       ↓
-   Planner (GLM-4.6) ◀── Wiki Reader (Karpathy LLM-Wiki, markdown)
-       ↓
-   ┌─── Tier-A · Scam Shield ──────────────────────────────────────┐
-   │                                                                │
-   │   read_emails  ─►  analyze_email  ◀─  search_scam_intel       │
-   │                          │            (Tavily / fixture)      │
-   │                          ◀────────  check_url                 │
-   │                                     (no-JS fetch, redirect    │
-   │                                      chain, form fields)      │
-   │                          ▼                                    │
-   │                   verdict (graded) ─►  archive_email          │
-   │                                       report_to_family        │
-   └────────────────────────────────────────────────────────────────┘
-   ┌─── Tier-B · Breadth ───────────────────────────────────────────┐
-   │   open_app · find_file · set_reminder · zoom_text             │
-   └────────────────────────────────────────────────────────────────┘
-       ↓                                          ↓
-   no skill matched?                       Wiki Updater + Linter ◀── data/raw/
-       ↓                                          ↓
-   log to unhandled_asks.md                  scam_alerts.md auto-refresh
-       ↓                                          ↓
-       └──────────► Kokoro TTS (local) ──────────► spoken reply
-```
+If you want to do it yourself, here's the deal.
 
-See [`CLAUDE.md`](./CLAUDE.md) for the dev harness, scope, and risk log.
-See [`WIKI_SCHEMA.md`](./WIKI_SCHEMA.md) for the runtime memory schema.
+### Prerequisites
 
----
+- macOS 14.2+ (for ScreenCaptureKit)
+- Xcode 15+
+- Node.js 18+ (for the Cloudflare Worker)
+- A [Cloudflare](https://cloudflare.com) account (free tier works)
+- API keys for: [Anthropic](https://console.anthropic.com), [AssemblyAI](https://www.assemblyai.com), [ElevenLabs](https://elevenlabs.io)
 
-## Why this wins on the judging rubric
+### 1. Set up the Cloudflare Worker
 
-| Criterion (20% each) | How Xiexie scores                                                                  |
-|----------------------|------------------------------------------------------------------------------------|
-| **Innovation**       | Multi-tool scam forensics + LLM-Wiki memory + voice grandchild — combo unseen in the 46 teams |
-| **Technical Depth**  | Composite agent: header forensics · URL sandbox · web grounding · GLM verdict · self-curating markdown memory · weekly linter |
-| **Completeness**     | 9 working skills + Verdict Card + visible memory updates + voice round-trip       |
-| **Practicality**     | $3.4B/yr elder-fraud problem, real persona, real macOS demo + Mail.app backup     |
-| **Presentation**     | Emotional opening (grandmother story), Verdict Card showpiece, GLM as backbone     |
-
----
-
-## Stack
-
-- **LLM:** [GLM-4.6](https://z.ai) (Z.AI), GLM-4V for vision · OpenAI fallback for dev
-- **Voice:** [faster-whisper](https://github.com/SYSTRAN/faster-whisper) (STT) · [Kokoro](https://github.com/hexgrad/kokoro) (TTS)
-- **Computer use:** [`browser-use`](https://github.com/browser-use/browser-use) · pyautogui · AppleScript via `osascript` · `mdfind`
-- **Scam forensics:** httpx (no-JS URL sandbox) · [Tavily Search](https://tavily.com) (web scam intel, fixture fallback) · header-auth heuristics
-- **Memory:** plain markdown (Karpathy LLM-Wiki, [Apr 2026](https://newclawtimes.com/articles/karpathy-llm-knowledge-bases-agent-memory-beyond-rag))
-- **Backend:** Python 3.12 · FastAPI · WebSockets
-- **Frontend:** Next.js 15 · shadcn/ui · Tailwind
-- **Target OS for demo:** macOS (Sequoia)
-
----
-
-## Repo layout
-
-```
-.
-├── CLAUDE.md             # dev harness (read me first)
-├── WIKI_SCHEMA.md        # runtime memory schema
-├── README.md             # you are here
-├── backend/              # Python — planner, skills, voice, memory
-│   └── xiexie/
-│       ├── main.py       # FastAPI + WebSockets
-│       ├── llm/          # provider abstraction (GLM + OpenAI fallback)
-│       ├── voice/        # STT + TTS
-│       ├── skills/       # Tier-A (scam-shield) + Tier-B (breadth) + stubs
-│       ├── memory/       # wiki R/W + linter
-│       └── planner/      # voice → skill selection
-├── app/                  # Next.js overlay UI
-│   ├── app/              # routes
-│   └── components/       # voice button, transcript, verdict card, wiki banner
-└── data/
-    ├── demo/             # fake inbox fixture for the live demo
-    ├── raw/              # immutable transcripts + screenshots + unhandled
-    └── wiki/             # the agent's living markdown memory
-```
-
----
-
-## Running locally
-
-> macOS Sequoia tested. Pre-grant Mic, Accessibility, Automation, Screen
-> Recording, Full Disk Access to your terminal — see [`CLAUDE.md` §9](./CLAUDE.md#9-macos-perms-checklist-do-this-before-coding).
+The Worker is a tiny proxy that holds your API keys. The app talks to the Worker, the Worker talks to the APIs. This way your keys never ship in the app binary.
 
 ```bash
-# 1. Backend
-cd backend
-uv sync
-cp ../.env.example ../.env  # fill ZAI_API_KEY (or OPENAI_API_KEY for dev)
-uv run uvicorn xiexie.main:app --reload --port 8787
-
-# 2. Frontend (in another terminal)
-cd app
-pnpm install
-pnpm dev   # http://localhost:3000
+cd worker
+npm install
 ```
 
-Speak. Watch the wiki grow.
+Now add your secrets. Wrangler will prompt you to paste each one:
 
----
+```bash
+npx wrangler secret put ANTHROPIC_API_KEY
+npx wrangler secret put ASSEMBLYAI_API_KEY
+npx wrangler secret put ELEVENLABS_API_KEY
+```
 
-## Acknowledgements
+For the ElevenLabs voice ID, open `wrangler.toml` and set it there (it's not sensitive):
 
-- Inspiration: [Clicky](https://www.clicky.so/) (the "AI buddy on your Mac"
-  paradigm) — we re-thought it for accessibility instead of pro creators.
-- Memory pattern: [Karpathy LLM-Wiki](https://newclawtimes.com/articles/karpathy-llm-knowledge-bases-agent-memory-beyond-rag) (Apr 2026).
-- Sponsors: **Z.AI** (GLM), MiniMax, Moonshot Kimi — for the open-source AI we love.
+```toml
+[vars]
+ELEVENLABS_VOICE_ID = "your-voice-id-here"
+```
 
----
+Deploy it:
 
-## License
+```bash
+npx wrangler deploy
+```
 
-MIT (see `LICENSE`).
+It'll give you a URL like `https://your-worker-name.your-subdomain.workers.dev`. Copy that.
+
+### 2. Run the Worker locally (for development)
+
+If you want to test changes to the Worker without deploying:
+
+```bash
+cd worker
+npx wrangler dev
+```
+
+This starts a local server (usually `http://localhost:8787`) that behaves exactly like the deployed Worker. You'll need to create a `.dev.vars` file in the `worker/` directory with your keys:
+
+```
+ANTHROPIC_API_KEY=sk-ant-...
+ASSEMBLYAI_API_KEY=...
+ELEVENLABS_API_KEY=...
+ELEVENLABS_VOICE_ID=...
+```
+
+Then update the proxy URLs in the Swift code to point to `http://localhost:8787` instead of the deployed Worker URL while developing. Grep for `clicky-proxy` to find them all.
+
+### 3. Update the proxy URLs in the app
+
+The app has the Worker URL hardcoded in a few places. Search for `your-worker-name.your-subdomain.workers.dev` and replace it with your Worker URL:
+
+```bash
+grep -r "clicky-proxy" leanring-buddy/
+```
+
+You'll find it in:
+- `CompanionManager.swift` — Claude chat + ElevenLabs TTS
+- `AssemblyAIStreamingTranscriptionProvider.swift` — AssemblyAI token endpoint
+
+### 4. Open in Xcode and run
+
+```bash
+open leanring-buddy.xcodeproj
+```
+
+In Xcode:
+1. Select the `leanring-buddy` scheme (yes, the typo is intentional, long story)
+2. Set your signing team under Signing & Capabilities
+3. Hit **Cmd + R** to build and run
+
+The app will appear in your menu bar (not the dock). Click the icon to open the panel, grant the permissions it asks for, and you're good.
+
+### Permissions the app needs
+
+- **Microphone** — for push-to-talk voice capture
+- **Accessibility** — for the global keyboard shortcut (Control + Option)
+- **Screen Recording** — for taking screenshots when you use the hotkey
+- **Screen Content** — for ScreenCaptureKit access
+
+## Architecture
+
+If you want the full technical breakdown, read `CLAUDE.md`. But here's the short version:
+
+**Menu bar app** (no dock icon) with two `NSPanel` windows — one for the control panel dropdown, one for the full-screen transparent cursor overlay. Push-to-talk streams audio over a websocket to AssemblyAI, sends the transcript + screenshot to Claude via streaming SSE, and plays the response through ElevenLabs TTS. Claude can embed `[POINT:x,y:label:screenN]` tags in its responses to make the cursor fly to specific UI elements across multiple monitors. All three APIs are proxied through a Cloudflare Worker.
+
+## Project structure
+
+```
+leanring-buddy/          # Swift source (yes, the typo stays)
+  CompanionManager.swift    # Central state machine
+  CompanionPanelView.swift  # Menu bar panel UI
+  ClaudeAPI.swift           # Claude streaming client
+  ElevenLabsTTSClient.swift # Text-to-speech playback
+  OverlayWindow.swift       # Blue cursor overlay
+  AssemblyAI*.swift         # Real-time transcription
+  BuddyDictation*.swift     # Push-to-talk pipeline
+worker/                  # Cloudflare Worker proxy
+  src/index.ts              # Three routes: /chat, /tts, /transcribe-token
+CLAUDE.md                # Full architecture doc (agents read this)
+```
+
+## Contributing
+
+PRs welcome. If you're using Claude Code, it already knows the codebase — just tell it what you want to build and point it at `CLAUDE.md`.
+
+Got feedback? DM me on X [@farzatv](https://x.com/farzatv).
