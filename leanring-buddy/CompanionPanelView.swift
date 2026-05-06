@@ -598,24 +598,37 @@ struct CompanionPanelView: View {
     // MARK: - Model Picker
 
     private var modelPickerRow: some View {
+        // Replaces the Sonnet/Opus picker. Xiexie routes everything
+        // through Z.AI's GLM family — GLM-4.6 for chat, GLM-4.5V for
+        // vision (auto-routed by the Worker whenever the request
+        // carries an image block). Showing a chip instead of a
+        // toggle reads as "this is the brain", not "pick one".
         HStack {
             Text("Model")
-                .font(.system(size: 13, weight: .medium))
+                .font(.system(size: 15, weight: .medium))
                 .foregroundColor(DS.Colors.textSecondary)
 
             Spacer()
 
-            HStack(spacing: 0) {
-                modelOptionButton(label: "Sonnet", modelID: "claude-sonnet-4-6")
-                modelOptionButton(label: "Opus", modelID: "claude-opus-4-6")
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(DS.Colors.accent)
+                    .frame(width: 8, height: 8)
+                    .shadow(color: DS.Colors.accent.opacity(0.6), radius: 4)
+
+                Text("GLM-4.6 + GLM-4.5V")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(DS.Colors.textPrimary)
             }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
             .background(
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .fill(Color.white.opacity(0.06))
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(DS.Colors.accentSubtle)
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 6, style: .continuous)
-                    .stroke(DS.Colors.borderSubtle, lineWidth: 0.5)
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(DS.Colors.accent.opacity(0.35), lineWidth: 1)
             )
         }
         .padding(.vertical, 4)
@@ -640,42 +653,51 @@ struct CompanionPanelView: View {
         .pointerCursor()
     }
 
-    // MARK: - DM Farza Button
+    // MARK: - Call Edouard (FaceTime live demo button)
 
-    private var dmFarzaButton: some View {
+    /// Triggers a live FaceTime audio call to Edouard's phone. The
+    /// ``facetime-audio:`` URL scheme launches the FaceTime app and
+    /// dials immediately — Edouard's iPhone rings on stage during
+    /// the pitch (when the judges press it), guaranteed wow moment.
+    /// macOS asks for FaceTime permission the first time; granted
+    /// once, subsequent calls fire instantly.
+    private var callEdouardButton: some View {
         Button(action: {
-            if let url = URL(string: "https://x.com/farzatv") {
+            if let url = URL(string: "facetime-audio:+33679546533") {
                 NSWorkspace.shared.open(url)
             }
         }) {
-            HStack(spacing: 8) {
-                Image(systemName: "bubble.left.fill")
-                    .font(.system(size: 12, weight: .medium))
+            HStack(spacing: 12) {
+                Image(systemName: "phone.fill")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(.white)
 
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Got feedback? DM me")
-                        .font(.system(size: 12, weight: .semibold))
-                    Text("Bugs, ideas, anything — I read every message.")
-                        .font(.system(size: 10))
-                        .foregroundColor(DS.Colors.textTertiary)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Call Edouard")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundColor(.white)
+                    Text("Live FaceTime — he picks up on stage.")
+                        .font(.system(size: 13))
+                        .foregroundColor(.white.opacity(0.85))
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .foregroundColor(DS.Colors.textSecondary)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
             .background(
                 RoundedRectangle(cornerRadius: DS.CornerRadius.medium, style: .continuous)
-                    .fill(Color.white.opacity(0.06))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: DS.CornerRadius.medium, style: .continuous)
-                    .stroke(DS.Colors.borderSubtle, lineWidth: 0.5)
+                    .fill(DS.Colors.accent)
+                    .shadow(color: DS.Colors.accent.opacity(0.45), radius: 10, x: 0, y: 4)
             )
         }
         .buttonStyle(.plain)
         .pointerCursor()
     }
+
+    // Backwards-compat alias so the existing ``dmFarzaButton`` reference
+    // in the panel layout doesn't need a rename — the body already
+    // resolves to our new ember CTA.
+    private var dmFarzaButton: some View { callEdouardButton }
 
     // MARK: - Footer
 
