@@ -178,7 +178,7 @@ export function CursorPointer({
           {active.label}
         </span>
       ) : null}
-      <style jsx>{`
+      <style jsx global>{`
         @keyframes xiexie-pointer-ring {
           0% {
             transform: scale(0.65);

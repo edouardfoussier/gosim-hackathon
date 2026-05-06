@@ -503,6 +503,7 @@ export default function Home() {
           etc.). Mirrors the native PyQt6 SoundwaveOverlay in the .app
           build. */}
       <CursorHalo
+        continuousActive={continuousActive}
         speaking={speaking}
         level={haloLevel}
         working={workingActive}
