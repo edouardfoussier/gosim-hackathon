@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>LSUIElement</key>
+	<true/>
+	<key>SUFeedURL</key>
+	<string>https://raw.githubusercontent.com/julianjear/makesomething-mac-app/main/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>/l3d2rw5ZZFRU3AadP/w2Zf8FHfhA6bKv16BQOV5OSk=</string>
+	<key>VoiceTranscriptionProvider</key>
+	<string>assemblyai</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Xiexie listens for your voice so it can read your emails, warn you about scams, and help with everyday tasks.</string>
+	<key>NSScreenCaptureUsageDescription</key>
+	<string>Xiexie reads what's on your screen when you ask it to ("What does this say?"). Screenshots stay on your Mac.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Xiexie uses on-device speech recognition as a fallback when the network is slow.</string>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>Xiexie uses Apple Events to open your apps, archive scam emails, and message your family on your behalf.</string>
+	<!-- Localhost exception so the Mac app can talk to ``wrangler dev`` over plain HTTP during development. Replace the dev exception with the deployed Cloudflare Worker URL (HTTPS) before shipping a public build. -->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+		<key>NSExceptionDomains</key>
+		<dict>
+			<key>localhost</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<true/>
+				<key>NSIncludesSubdomains</key>
+				<true/>
+			</dict>
+			<key>127.0.0.1</key>
+			<dict>
+				<key>NSExceptionAllowsInsecureHTTPLoads</key>
+				<true/>
+				<key>NSIncludesSubdomains</key>
+				<true/>
+			</dict>
+		</dict>
+	</dict>
+</dict>
+</plist>

@@ -1,0 +1,17 @@
+name = "xiexie-proxy"
+main = "src/index.ts"
+compatibility_date = "2024-01-01"
+
+# Public, non-secret defaults. Override locally in .dev.vars or via
+# ``wrangler secret put`` once deployed. See README.md for the
+# end-to-end setup recipe.
+[vars]
+# ── Z.AI (LLM orchestrator + vision) ─────────────────────────────────
+ZAI_BASE_URL = "https://api.z.ai/api/paas/v4"
+ZAI_TEXT_MODEL = "glm-4.6"
+ZAI_VISION_MODEL = "glm-4.5v"
+
+# ── ElevenLabs (TTS) — voice ID is public, only the key is secret. ──
+# Default below is Clicky's stock voice; swap with a senior-friendly
+# voice (warmer, slower) post-launch — see ElevenLabs voice library.
+ELEVENLABS_VOICE_ID = "kPzsL2i3teMYv0FxEYQ6"
