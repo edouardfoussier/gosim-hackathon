@@ -65,6 +65,10 @@ final class CompanionManager: ObservableObject {
     let buddyDictationManager = BuddyDictationManager()
     let globalPushToTalkShortcutMonitor = GlobalPushToTalkShortcutMonitor()
     let overlayWindowManager = OverlayWindowManager()
+    /// Always-on "Xiexie" wake-word listener. Fires the same code path that
+    /// ctrl+option press fires today. Independent of and never breaks the
+    /// existing push-to-talk shortcut path.
+    let wakeWordDetector = WakeWordDetector()
     // Response text is now displayed inline on the cursor overlay via
     // streamingResponseText, so no separate response overlay manager is needed.
 
@@ -97,11 +101,23 @@ final class CompanionManager: ObservableObject {
     private var shortcutTransitionCancellable: AnyCancellable?
     private var voiceStateCancellable: AnyCancellable?
     private var audioPowerCancellable: AnyCancellable?
+    private var wakeWordDidFireCancellable: AnyCancellable?
     private var accessibilityCheckTimer: Timer?
     private var pendingKeyboardShortcutStartTask: Task<Void, Never>?
     /// Scheduled hide for transient cursor mode — cancelled if the user
     /// speaks again before the delay elapses.
     private var transientHideTask: Task<Void, Never>?
+
+    /// True while a wake-word-initiated conversation is active. Used to scope
+    /// the "thank you" close-word watcher and the safety timeout — both only
+    /// matter for wake-word sessions, not for ctrl+option push-to-talk.
+    private var isWakeWordTriggeredSessionActive: Bool = false
+    /// Auto-stop fallback for wake-word sessions where the user never says
+    /// "thank you" and AssemblyAI doesn't fire `end_of_turn` cleanly.
+    private var wakeWordSessionSafetyStopWorkItem: DispatchWorkItem?
+    /// How long a wake-word session is allowed to record before we force a
+    /// stop, even if no "thank you" or natural endpointing has fired yet.
+    private static let wakeWordSessionSafetyStopSeconds: TimeInterval = 12.0
 
     /// True when all three required permissions (accessibility, screen recording,
     /// microphone) are granted. Used by the panel to show a single "all good" state.
@@ -185,6 +201,8 @@ final class CompanionManager: ObservableObject {
         bindVoiceStateObservation()
         bindAudioPowerLevel()
         bindShortcutTransitions()
+        bindWakeWordDetectorSubscriptions()
+        startAlwaysOnWakeWordDetectorIfReady()
         // Eagerly touch the Claude API so its TLS warmup handshake completes
         // well before the onboarding demo fires at ~40s into the video.
         _ = claudeAPI
@@ -295,15 +313,20 @@ final class CompanionManager: ObservableObject {
 
     func stop() {
         globalPushToTalkShortcutMonitor.stop()
+        wakeWordDetector.stop()
         buddyDictationManager.cancelCurrentDictation()
         overlayWindowManager.hideOverlay()
         transientHideTask?.cancel()
+        wakeWordSessionSafetyStopWorkItem?.cancel()
+        wakeWordSessionSafetyStopWorkItem = nil
+        isWakeWordTriggeredSessionActive = false
 
         currentResponseTask?.cancel()
         currentResponseTask = nil
         shortcutTransitionCancellable?.cancel()
         voiceStateCancellable?.cancel()
         audioPowerCancellable?.cancel()
+        wakeWordDidFireCancellable?.cancel()
         accessibilityCheckTimer?.invalidate()
         accessibilityCheckTimer = nil
     }
@@ -344,6 +367,13 @@ final class CompanionManager: ObservableObject {
         }
         if !previouslyHadMicrophone && hasMicrophonePermission {
             ClickyAnalytics.trackPermissionGranted(permission: "microphone")
+        }
+
+        // The mic permission is what unlocks the always-on wake-word listener.
+        // We don't gate on accessibility (the listener is purely local) or
+        // screen recording (no screenshots are taken here).
+        if !previouslyHadMicrophone && hasMicrophonePermission {
+            startAlwaysOnWakeWordDetectorIfReady()
         }
         // Screen content permission is persisted — once the user has approved the
         // SCShareableContent picker, we don't need to re-check it.
@@ -474,6 +504,153 @@ final class CompanionManager: ObservableObject {
             .sink { [weak self] transition in
                 self?.handleShortcutTransition(transition)
             }
+    }
+
+    /// Subscribes to the always-on wake-word detector. When it fires, we
+    /// invoke the same code path that ctrl+option press fires today, except
+    /// we also arm the "thank you" close-word watcher and a safety timeout
+    /// because the user can't release a key to end a wake-word session.
+    private func bindWakeWordDetectorSubscriptions() {
+        wakeWordDidFireCancellable = wakeWordDetector
+            .wakeWordDidFire
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.handleWakeWordFired()
+            }
+    }
+
+    /// Starts the always-on wake-word listener if (a) the mic permission has
+    /// been granted, and (b) we're not already listening. Safe to call
+    /// repeatedly. The detector itself no-ops when already running.
+    private func startAlwaysOnWakeWordDetectorIfReady() {
+        guard hasMicrophonePermission else { return }
+        guard !wakeWordDetector.isListening else { return }
+        wakeWordDetector.start()
+    }
+
+    private func handleWakeWordFired() {
+        // If we're already in the middle of a dictation (push-to-talk or a
+        // previous wake-word turn), ignore. The detector's internal cooldown
+        // already debounces double-fires, but this is the harder check.
+        guard !buddyDictationManager.isDictationInProgress else {
+            print("🎯 Wake-word fired but dictation already in progress — ignored.")
+            return
+        }
+        guard !showOnboardingVideo else { return }
+
+        ClickyAnalytics.trackPushToTalkStarted()
+        print("🎯 Wake-word triggered conversation start.")
+
+        startWakeWordTriggeredConversation()
+    }
+
+    /// Mirrors the `.pressed` arm of `handleShortcutTransition` but tags the
+    /// session as wake-word-initiated and installs the auto-stop machinery.
+    private func startWakeWordTriggeredConversation() {
+        // Same overlay-and-cleanup setup as ctrl+option press.
+        transientHideTask?.cancel()
+        transientHideTask = nil
+
+        if !isClickyCursorEnabled && !isOverlayVisible {
+            overlayWindowManager.hasShownOverlayBefore = true
+            overlayWindowManager.showOverlay(onScreens: NSScreen.screens, companionManager: self)
+            isOverlayVisible = true
+        }
+
+        NotificationCenter.default.post(name: .clickyDismissPanel, object: nil)
+
+        currentResponseTask?.cancel()
+        elevenLabsTTSClient.stopPlayback()
+        clearDetectedElementLocation()
+
+        if showOnboardingPrompt {
+            withAnimation(.easeOut(duration: 0.3)) {
+                onboardingPromptOpacity = 0.0
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                self.showOnboardingPrompt = false
+                self.onboardingPromptText = ""
+            }
+        }
+
+        // Mark this session as wake-word-initiated *before* the dictation
+        // manager calls back, so the partial-transcript watcher recognises it.
+        isWakeWordTriggeredSessionActive = true
+        scheduleWakeWordSessionSafetyStop()
+
+        pendingKeyboardShortcutStartTask?.cancel()
+        pendingKeyboardShortcutStartTask = Task {
+            await buddyDictationManager.startPushToTalkFromKeyboardShortcut(
+                currentDraftText: "",
+                updateDraftText: { [weak self] partialTranscript in
+                    self?.checkForWakeWordCloseWordInPartialTranscript(partialTranscript)
+                },
+                submitDraftText: { [weak self] finalTranscript in
+                    self?.lastTranscript = finalTranscript
+                    print("🗣️ Companion received transcript (wake-word session): \(finalTranscript)")
+                    ClickyAnalytics.trackUserMessageSent(transcript: finalTranscript)
+                    self?.sendTranscriptToClaudeWithScreenshot(transcript: finalTranscript)
+                }
+            )
+        }
+    }
+
+    /// If the partial transcript contains the close-word "thank you" (in any
+    /// case / spacing), we treat that as the user signalling the conversation
+    /// should end and fire the same release path that ctrl+option key-up does.
+    private func checkForWakeWordCloseWordInPartialTranscript(_ partialTranscript: String) {
+        guard isWakeWordTriggeredSessionActive else { return }
+
+        let normalisedTranscript = partialTranscript.lowercased()
+        let containsEnglishCloseWord = normalisedTranscript.contains("thank you")
+        // French equivalent — Michel demos in French. "merci" alone is too
+        // short to be safe in random conversation, but it's the natural
+        // close-word in French and the dictation manager will already have a
+        // final transcript at that point so we accept it.
+        let containsFrenchCloseWord = normalisedTranscript.contains("merci")
+
+        guard containsEnglishCloseWord || containsFrenchCloseWord else { return }
+
+        print("🎯 Wake-word session: close-word detected in partial transcript — stopping.")
+        finishWakeWordTriggeredConversation()
+    }
+
+    /// 12-second failsafe so a wake-word session that stops getting transcript
+    /// updates (e.g., AssemblyAI socket goes flaky) still resolves cleanly
+    /// instead of hanging the app in "listening" state forever.
+    private func scheduleWakeWordSessionSafetyStop() {
+        wakeWordSessionSafetyStopWorkItem?.cancel()
+        let safetyStopWorkItem = DispatchWorkItem { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                guard self.isWakeWordTriggeredSessionActive else { return }
+                print("🎯 Wake-word session: safety timeout reached — forcing stop.")
+                self.finishWakeWordTriggeredConversation()
+            }
+        }
+        wakeWordSessionSafetyStopWorkItem = safetyStopWorkItem
+
+        DispatchQueue.main.asyncAfter(
+            deadline: .now() + Self.wakeWordSessionSafetyStopSeconds,
+            execute: safetyStopWorkItem
+        )
+    }
+
+    /// Fires the same code path as `.released` on the ctrl+option shortcut,
+    /// then clears wake-word session bookkeeping.
+    private func finishWakeWordTriggeredConversation() {
+        wakeWordSessionSafetyStopWorkItem?.cancel()
+        wakeWordSessionSafetyStopWorkItem = nil
+        isWakeWordTriggeredSessionActive = false
+
+        ClickyAnalytics.trackPushToTalkReleased()
+        pendingKeyboardShortcutStartTask?.cancel()
+        pendingKeyboardShortcutStartTask = nil
+        buddyDictationManager.stopPushToTalkFromKeyboardShortcut()
+
+        // Clear the detector's rolling buffers so the audio captured during
+        // recording doesn't immediately re-trigger another wake-word fire.
+        wakeWordDetector.resetPipelineBuffers()
     }
 
     private func handleShortcutTransition(_ transition: BuddyPushToTalkShortcut.ShortcutTransition) {
