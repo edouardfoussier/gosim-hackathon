@@ -15,6 +15,7 @@
 //
 
 import AppKit
+import Combine
 import SwiftUI
 
 // MARK: - Panel
