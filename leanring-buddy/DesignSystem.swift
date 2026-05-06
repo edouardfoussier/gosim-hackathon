@@ -20,43 +20,47 @@ enum DS {
 
     enum Colors {
 
-        // ── Backgrounds ──────────────────────────────────────────────
-        // Layered surfaces from deepest to most elevated.
-        // Higher surfaces are lighter, creating a sense of depth.
+        // ── Backgrounds (Xiexie cream — replaces Clicky's dark glass) ─
+        // Cream-paper palette tuned for senior visibility — high
+        // contrast with ember accent, no glare from a dark UI in the
+        // very-bright stage lighting we expect at GOSIM. Higher
+        // surfaces are slightly creamier, creating a paper-stack
+        // sense of depth without going grey-on-grey (which Michel's
+        // eyesight reads as a single muddy blob).
 
         /// The deepest background — used for the main app window fill.
-        static let background = Color(hex: "#101211")
+        static let background = Color(hex: "#FBF7F0")
 
-        /// First elevation layer — used for cards, sidebar, top bar backgrounds.
-        static let surface1 = Color(hex: "#171918")
+        /// First elevation layer — cards, sidebar, top-bar backgrounds.
+        static let surface1 = Color(hex: "#F5EFE3")
 
-        /// Second elevation layer — used for input fields, elevated cards, chat bubbles.
-        static let surface2 = Color(hex: "#202221")
+        /// Second elevation layer — input fields, elevated cards.
+        static let surface2 = Color(hex: "#EFE7D5")
 
-        /// Third elevation layer — used for hover backgrounds on interactive elements.
-        static let surface3 = Color(hex: "#272A29")
+        /// Third elevation layer — hover backgrounds on interactive elements.
+        static let surface3 = Color(hex: "#E8DFC8")
 
-        /// Fourth elevation layer — used for active/pressed states on interactive elements.
-        static let surface4 = Color(hex: "#2E3130")
+        /// Fourth elevation layer — active/pressed states.
+        static let surface4 = Color(hex: "#DFD3B4")
 
         // ── Borders ──────────────────────────────────────────────────
 
-        /// Subtle border — used for card outlines, dividers, input field borders.
-        static let borderSubtle = Color(hex: "#373B39")
+        /// Subtle border — card outlines, dividers, input field borders.
+        static let borderSubtle = Color(hex: "#D5C9B0")
 
-        /// Strong border — used for focused inputs, hovered card outlines.
-        static let borderStrong = Color(hex: "#444947")
+        /// Strong border — focused inputs, hovered card outlines.
+        static let borderStrong = Color(hex: "#B9A881")
 
-        // ── Text ─────────────────────────────────────────────────────
+        // ── Text (ink-on-cream, was light-on-dark) ──────────────────
 
-        /// Primary text — main body text, titles, headings.
-        static let textPrimary = Color(hex: "#ECEEED")
+        /// Primary text — main body, titles, headings (deep ink).
+        static let textPrimary = Color(hex: "#2B1D12")
 
         /// Secondary text — descriptions, hints, muted labels.
-        static let textSecondary = Color(hex: "#ADB5B2")
+        static let textSecondary = Color(hex: "#5C4A38")
 
-        /// Tertiary text — very muted, used for section labels, timestamps, disabled text.
-        static let textTertiary = Color(hex: "#6B736F")
+        /// Tertiary text — very muted, section labels, timestamps.
+        static let textTertiary = Color(hex: "#8D7C6A")
 
         /// Text used on top of the accent fill (#2563eb blue), like the primary button label.
         /// White on #2563eb achieves ~5.1:1 contrast — WCAG AA compliant.
@@ -642,15 +646,15 @@ struct DSIconButtonStyle: ButtonStyle {
                             .overlay(
                                 ZStack {
                                     RoundedRectangle(cornerRadius: 6)
-                                        .stroke(Color.white.opacity(0.20), lineWidth: 0.8)
+                                        .stroke(DS.Colors.borderStrong, lineWidth: 0.8)
 
                                     RoundedRectangle(cornerRadius: 6)
                                         .trim(from: 0, to: 0.5)
                                         .stroke(
                                             LinearGradient(
                                                 colors: [
-                                                    Color.white.opacity(0.10),
-                                                    Color.white.opacity(0.02)
+                                                    DS.Colors.surface3,
+                                                    DS.Colors.surface1
                                                 ],
                                                 startPoint: .top,
                                                 endPoint: .bottom

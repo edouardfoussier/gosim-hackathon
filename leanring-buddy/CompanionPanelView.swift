@@ -112,7 +112,7 @@ struct CompanionPanelView: View {
                     .frame(width: 20, height: 20)
                     .background(
                         Circle()
-                            .fill(Color.white.opacity(0.08))
+                            .fill(DS.Colors.surface2)
                     )
             }
             .buttonStyle(.plain)
@@ -193,7 +193,7 @@ struct CompanionPanelView: View {
                         .padding(.vertical, 8)
                         .background(
                             RoundedRectangle(cornerRadius: DS.CornerRadius.medium, style: .continuous)
-                                .fill(Color.white.opacity(0.08))
+                                .fill(DS.Colors.surface2)
                         )
                         .overlay(
                             RoundedRectangle(cornerRadius: DS.CornerRadius.medium, style: .continuous)
@@ -646,7 +646,7 @@ struct CompanionPanelView: View {
                 .padding(.vertical, 5)
                 .background(
                     RoundedRectangle(cornerRadius: 5, style: .continuous)
-                        .fill(isSelected ? Color.white.opacity(0.1) : Color.clear)
+                        .fill(isSelected ? DS.Colors.surface3 : Color.clear)
                 )
         }
         .buttonStyle(.plain)
@@ -663,7 +663,10 @@ struct CompanionPanelView: View {
     /// once, subsequent calls fire instantly.
     private var callEdouardButton: some View {
         Button(action: {
-            if let url = URL(string: "facetime-audio:+33679546533") {
+            // Onoff (audio-only) number — keep ``facetime-audio:``
+            // scheme so macOS dials voice rather than video. Onoff
+            // forwards to Edouard's iPhone, which rings on stage.
+            if let url = URL(string: "facetime-audio:+33756900927") {
                 NSWorkspace.shared.open(url)
             }
         }) {
