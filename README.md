@@ -1,9 +1,13 @@
 # Xiexie 谢谢 — your AI grandchild
 
+![Xiexie landing — when your grandchild is busy, your computer can be the next best thing](docs/assets/landing-hero.png)
+
 A voice-first macOS companion that protects seniors from email scams,
 reads their screen out loud, and points at things they can't find.
 Forked from [Farza's Clicky](https://github.com/farzaa/clicky) (MIT)
 and re-tuned end-to-end for **Z.AI's GLM-4.6 + GLM-4.5V**.
+
+Live: **[getxiexie.com](https://getxiexie.com)** · Demo video: **[getxiexie.com/demo](https://getxiexie.com/demo)**
 
 Built in 36 hours at the **GOSIM 2026 Agentic Hackathon** (Paris,
 May 5–6) for the **Z.AI Innovation track**. The demo persona is
