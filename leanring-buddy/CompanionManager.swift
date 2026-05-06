@@ -65,6 +65,11 @@ final class CompanionManager: ObservableObject {
     let buddyDictationManager = BuddyDictationManager()
     let globalPushToTalkShortcutMonitor = GlobalPushToTalkShortcutMonitor()
     let overlayWindowManager = OverlayWindowManager()
+    /// Side-screen status badge — pulsing warning glyph that slides in from
+    /// the top-right of the primary screen whenever Xiexie's verdict on the
+    /// current email is "phishing" or "suspicious", and a brief green check
+    /// for "clear". Independent of the cursor companion's pointing flow.
+    let warningGlyphOverlayManager = WarningGlyphOverlayManager()
     // Response text is now displayed inline on the cursor overlay via
     // streamingResponseText, so no separate response overlay manager is needed.
 
@@ -297,6 +302,7 @@ final class CompanionManager: ObservableObject {
         globalPushToTalkShortcutMonitor.stop()
         buddyDictationManager.cancelCurrentDictation()
         overlayWindowManager.hideOverlay()
+        warningGlyphOverlayManager.dismissImmediately()
         transientHideTask?.cancel()
 
         currentResponseTask?.cancel()
@@ -588,9 +594,17 @@ final class CompanionManager: ObservableObject {
 
     if pointing wouldn't help, append [POINT:none].
 
+    email-safety verdict tag:
+    when (and ONLY when) michel's question is about whether an email on screen is safe, prepend a verdict tag to the very start of your response, BEFORE any spoken text. the tag drives a side-screen warning badge so michel can see at a glance — even from across the room — whether the email is dangerous.
+
+    format: [VERDICT:phishing] for outright scams, [VERDICT:suspicious] for emails that look off but you're not 100% sure, [VERDICT:clear] for benign / real emails.
+
+    if the question has nothing to do with email safety (weather, music, family, ui help), do NOT emit a verdict tag. omit it entirely. false alarms are worse than missed badges.
+
     examples:
-    - michel asks "is this email a scam?" with a phishing email visible: "michel, this is a scam. the sender pretends to be aetna but the address ends in dot-r-u — that's russia. don't click, don't reply, just archive it. if you're worried about your insurance, call the number printed on your aetna card. [POINT:780,420:fake link]"
-    - michel asks "and this one?" with a real email from his daughter: "michel, this one is real. it's from your daughter sophie — she'll land at charles de gaulle at four, and she's already booked a taxi. nothing to worry about. [POINT:none]"
+    - michel asks "is this email a scam?" with a phishing email visible: "[VERDICT:phishing] michel, this is a scam. the sender pretends to be aetna but the address ends in dot-r-u — that's russia. don't click, don't reply, just archive it. if you're worried about your insurance, call the number printed on your aetna card. [POINT:780,420:fake link]"
+    - michel asks "and this one?" with a real email from his daughter: "[VERDICT:clear] michel, this one is real. it's from your daughter sophie — she'll land at charles de gaulle at four, and she's already booked a taxi. nothing to worry about. [POINT:none]"
+    - michel asks "is this safe?" with an email that has urgent language but no obvious typosquat: "[VERDICT:suspicious] michel, something looks off. it's pushing you to act in twenty-four hours, and that pressure is the trick. don't click any link. if it claims to be from your bank, call the number on your card. [POINT:540,330:urgent button]"
     - michel asks "play me some piaf": "of course, michel. opening music now and playing edith piaf. [POINT:none]"
     - michel asks "what does this say?" about a small button: "see this little button in the corner? it says 'sign out'. [POINT:1240,82:sign out]"
     """
@@ -641,8 +655,30 @@ final class CompanionManager: ObservableObject {
 
                 guard !Task.isCancelled else { return }
 
-                // Parse the [POINT:...] tag from Claude's response
-                let parseResult = Self.parsePointingCoordinates(from: fullResponseText)
+                // Parse the [VERDICT:phishing|suspicious|clear] tag first so
+                // it's stripped before the POINT parser runs and before TTS
+                // ever sees the text. Fire the side-screen warning badge as
+                // soon as we have a verdict — independent of the cursor
+                // pointing flow, which still uses [POINT:...].
+                let verdictParseResult = Self.parseVerdictTag(from: fullResponseText)
+                let textWithoutVerdictTag = verdictParseResult.textWithoutVerdictTag
+
+                // Pick the verdict severity to show on the side-screen badge.
+                // Prefer Claude's explicit [VERDICT:...] tag; if absent, fall
+                // back to a conservative keyword scan over the first 200
+                // characters of the spoken text. The fallback "fails closed":
+                // if nothing matches, no badge — never a false alarm.
+                let resolvedVerdictSeverity: WarningGlyphSeverity? = verdictParseResult.severity
+                    ?? Self.heuristicallyInferVerdictSeverity(fromResponseText: textWithoutVerdictTag)
+
+                if let resolvedVerdictSeverity {
+                    let triggerSource = verdictParseResult.severity != nil ? "tag" : "heuristic"
+                    print("🛡️ Warning glyph fired: \(resolvedVerdictSeverity.rawValue) (via \(triggerSource))")
+                    warningGlyphOverlayManager.displayWarningGlyph(severity: resolvedVerdictSeverity)
+                }
+
+                // Parse the [POINT:...] tag from the verdict-stripped text
+                let parseResult = Self.parsePointingCoordinates(from: textWithoutVerdictTag)
                 let spokenText = parseResult.spokenText
 
                 // Handle element pointing if Claude returned coordinates.
@@ -782,6 +818,115 @@ final class CompanionManager: ObservableObject {
         let synthesizer = NSSpeechSynthesizer()
         synthesizer.startSpeaking(utterance)
         voiceState = .responding
+    }
+
+    // MARK: - Verdict Tag Parsing
+
+    /// Result of parsing a [VERDICT:phishing|suspicious|clear] tag from
+    /// Claude's response. The tag is always stripped from the spoken text
+    /// — only the side-screen badge consumes it.
+    struct VerdictParseResult {
+        /// The original response text with the [VERDICT:...] tag removed
+        /// (if any). Always safe to feed to the [POINT:...] parser next.
+        let textWithoutVerdictTag: String
+        /// The parsed severity, or nil if no recognized verdict tag was present.
+        let severity: WarningGlyphSeverity?
+    }
+
+    /// Strips the first `[VERDICT:phishing|suspicious|clear]` tag found
+    /// anywhere in `responseText` and returns the matching severity. The
+    /// match is case-insensitive and tolerates surrounding whitespace.
+    /// If no tag is present, the original text is returned unchanged with
+    /// `severity == nil` — the heuristic fallback handles that case.
+    static func parseVerdictTag(from responseText: String) -> VerdictParseResult {
+        let pattern = #"\[VERDICT:\s*(phishing|suspicious|clear)\s*\]"#
+
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
+              let match = regex.firstMatch(
+                in: responseText,
+                range: NSRange(responseText.startIndex..., in: responseText)
+              ),
+              match.numberOfRanges >= 2,
+              let severityRange = Range(match.range(at: 1), in: responseText),
+              let tagRange = Range(match.range, in: responseText)
+        else {
+            return VerdictParseResult(textWithoutVerdictTag: responseText, severity: nil)
+        }
+
+        let rawSeverityToken = String(responseText[severityRange]).lowercased()
+        let parsedSeverity: WarningGlyphSeverity? = {
+            switch rawSeverityToken {
+            case "phishing": return .phishing
+            case "suspicious": return .suspicious
+            case "clear": return .clear
+            default: return nil
+            }
+        }()
+
+        // Remove the entire tag substring from the spoken text and collapse
+        // any double spaces / leading whitespace the removal leaves behind.
+        var textWithoutVerdictTag = responseText
+        textWithoutVerdictTag.removeSubrange(tagRange)
+        textWithoutVerdictTag = textWithoutVerdictTag
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "  ", with: " ")
+
+        return VerdictParseResult(
+            textWithoutVerdictTag: textWithoutVerdictTag,
+            severity: parsedSeverity
+        )
+    }
+
+    /// Conservative keyword-based fallback for when Claude forgets to emit
+    /// a [VERDICT:...] tag. Scans only the first 200 characters of the
+    /// reply (case-insensitive) so off-hand mentions of "scam" later in a
+    /// long answer don't accidentally fire the badge. Fails closed —
+    /// returns nil unless one of the verdict phrases hits.
+    static func heuristicallyInferVerdictSeverity(fromResponseText responseText: String) -> WarningGlyphSeverity? {
+        let lowercaseLeadingWindow = String(
+            responseText.prefix(200)
+        ).lowercased()
+
+        // Order matters: phishing > suspicious > clear, since some phrases
+        // overlap (e.g. "this is a scam" in clear's negation would never hit
+        // here, but keeping the precedence explicit makes intent obvious).
+        let phishingPhrases = [
+            "this is a scam",
+            "c'est une arnaque",
+            "c'est une escroquerie",
+            "this is a phishing"
+        ]
+        if phishingPhrases.contains(where: { lowercaseLeadingWindow.contains($0) }) {
+            return .phishing
+        }
+
+        let suspiciousPhrases = [
+            "looks off",
+            "louche",
+            "je ne suis pas sûr",
+            "je ne suis pas sur",
+            "vérifie",
+            "verifie",
+            "appelle ta banque",
+            "something looks off"
+        ]
+        if suspiciousPhrases.contains(where: { lowercaseLeadingWindow.contains($0) }) {
+            return .suspicious
+        }
+
+        let clearPhrases = [
+            "this one is real",
+            "c'est réel",
+            "c'est reel",
+            "tu peux lire",
+            "rien à craindre",
+            "rien a craindre"
+        ]
+        if clearPhrases.contains(where: { lowercaseLeadingWindow.contains($0) }) {
+            return .clear
+        }
+
+        return nil
     }
 
     // MARK: - Point Tag Parsing
