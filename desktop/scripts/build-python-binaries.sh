@@ -30,22 +30,40 @@ echo "[python] sidecar drop dir : $BINARIES_DIR"
 
 mkdir -p "$BINARIES_DIR"
 
-# ── pick the right python interpreter ──────────────────────────────
-# The backend already pins ``requires-python = ">=3.11"`` and uses ``uv``
-# for env management. We reuse uv's interpreter so the frozen binary
-# matches dev exactly.
-if command -v uv >/dev/null 2>&1; then
-  PY_CMD=(uv run --project "$BACKEND_DIR" python -m PyInstaller)
-  PIP_INSTALL=(uv pip install --project "$BACKEND_DIR")
-else
-  PY_CMD=(python3 -m PyInstaller)
-  PIP_INSTALL=(python3 -m pip install --user)
+# ── pick the right python interpreter per sidecar ──────────────────
+# Each sidecar has its own venv: the backend pins faster-whisper +
+# fastapi via ``uv``, the overlay pins PyQt6 via a separate
+# ``overlay/.venv``. PyInstaller MUST run from the venv that owns the
+# imports for the script being frozen — running both from the backend
+# venv silently produces an overlay binary that ``ImportError``s on
+# ``PyQt6`` at first launch. (We hit that on 2026-05-06; took 30 min
+# to track down because PyInstaller swallowed the missing-module
+# warning into a "WARNING: Library not found" line that scrolled past
+# in the build log.)
+OVERLAY_VENV_PY="$REPO_ROOT/overlay/.venv/bin/python"
+if [[ ! -x "$OVERLAY_VENV_PY" ]]; then
+  echo "[python] ERROR: overlay venv missing at $OVERLAY_VENV_PY" >&2
+  echo "[python] create it with:  cd overlay && python3 -m venv .venv && .venv/bin/pip install PyQt6 websockets" >&2
+  exit 1
 fi
 
-# ── ensure pyinstaller is available in the project venv ───────────
-if ! "${PY_CMD[@]}" --version >/dev/null 2>&1; then
+if command -v uv >/dev/null 2>&1; then
+  PY_BACKEND=(uv run --project "$BACKEND_DIR" python -m PyInstaller)
+  PIP_INSTALL_BACKEND=(uv pip install --project "$BACKEND_DIR")
+else
+  PY_BACKEND=(python3 -m PyInstaller)
+  PIP_INSTALL_BACKEND=(python3 -m pip install --user)
+fi
+PY_OVERLAY=("$OVERLAY_VENV_PY" -m PyInstaller)
+
+# ── ensure pyinstaller is available in BOTH venvs ──────────────────
+if ! "${PY_BACKEND[@]}" --version >/dev/null 2>&1; then
   echo "[python] installing pyinstaller into the backend venv"
-  "${PIP_INSTALL[@]}" "pyinstaller>=6.10"
+  "${PIP_INSTALL_BACKEND[@]}" "pyinstaller>=6.10"
+fi
+if ! "${PY_OVERLAY[@]}" --version >/dev/null 2>&1; then
+  echo "[python] installing pyinstaller into the overlay venv"
+  "$OVERLAY_VENV_PY" -m pip install "pyinstaller>=6.10"
 fi
 
 build_backend() {
@@ -59,7 +77,7 @@ build_backend() {
   # see through (uvicorn auto-loads its own subpackages; faster_whisper
   # uses dynamic ctypes to find ctranslate2; PyAutoGUI on macOS pulls
   # ``Quartz`` lazily; etc.).
-  "${PY_CMD[@]}" \
+  "${PY_BACKEND[@]}" \
     --onedir \
     --name xiexie-backend \
     --noconfirm \
@@ -104,7 +122,7 @@ build_overlay() {
   rm -rf "$REPO_ROOT/build/xiexie-overlay" "$REPO_ROOT/dist/xiexie-overlay"
   rm -rf "$BINARIES_DIR/xiexie-overlay"
 
-  "${PY_CMD[@]}" \
+  "${PY_OVERLAY[@]}" \
     --onedir \
     --name xiexie-overlay \
     --noconfirm \

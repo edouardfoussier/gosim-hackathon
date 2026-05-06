@@ -12,6 +12,7 @@
 
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
@@ -51,10 +52,25 @@ fn binary_dir(app: &AppHandle, name: &str) -> Result<PathBuf, String> {
     Ok(resource_dir.join("binaries").join(name))
 }
 
+/// Idempotency latches. Tauri's ``setup`` closure runs once in theory,
+/// but on macOS the single-instance plugin and the tray-icon
+/// initialisation race in a way that re-fires the closure (or its
+/// children) on a second activation event — and ``start_backend`` then
+/// tries to bind 8787 a second time, hitting EADDRINUSE in the
+/// :backend log. Guarding with an atomic guarantees we only spawn each
+/// sidecar once per process lifetime regardless of upstream call order.
+static BACKEND_STARTED: AtomicBool = AtomicBool::new(false);
+static OVERLAY_STARTED: AtomicBool = AtomicBool::new(false);
+
 /// Spawn the FastAPI backend as ``binaries/xiexie-backend/xiexie-backend``
 /// and block until ``GET /health`` returns 200 (or the 30 s timeout
-/// elapses, whichever comes first).
+/// elapses, whichever comes first). Idempotent: a second call after a
+/// successful spawn is a no-op.
 pub fn start_backend(app: &AppHandle) -> Result<(), String> {
+    if BACKEND_STARTED.swap(true, Ordering::SeqCst) {
+        eprintln!("[xiexie] backend already started — skipping duplicate launch");
+        return Ok(());
+    }
     let dir = binary_dir(app, "xiexie-backend")?;
     let bin = dir.join("xiexie-backend");
     if !bin.exists() {
@@ -96,11 +112,16 @@ pub fn start_backend(app: &AppHandle) -> Result<(), String> {
 }
 
 /// Spawn the PyQt6 overlay daemon — ``binaries/xiexie-overlay/xiexie-overlay``
-/// — pointed at the backend's WebSocket endpoint.
+/// — pointed at the backend's WebSocket endpoint. Idempotent like
+/// ``start_backend`` — duplicate calls are a no-op.
 ///
 /// The overlay reconnects on its own if the backend isn't ready yet, so
 /// we don't health-check this one.
 pub fn start_overlay(app: &AppHandle) -> Result<(), String> {
+    if OVERLAY_STARTED.swap(true, Ordering::SeqCst) {
+        eprintln!("[xiexie] overlay already started — skipping duplicate launch");
+        return Ok(());
+    }
     let dir = binary_dir(app, "xiexie-overlay")?;
     let bin = dir.join("xiexie-overlay");
     if !bin.exists() {

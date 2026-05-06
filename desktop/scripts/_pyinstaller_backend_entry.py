@@ -37,7 +37,12 @@ def main() -> int:
     # the server, so the first ``/skills`` request is instant.
     from xiexie.main import app  # noqa: WPS433  — intentional late import
 
-    print(f"[xiexie-backend] starting uvicorn on {host}:{port} (pid {os.getpid()})", flush=True)
+    print(
+        f"[xiexie-backend] starting uvicorn on {host}:{port} "
+        f"(pid {os.getpid()}, ppid {os.getppid()}, "
+        f"argv0={sys.argv[0] if sys.argv else '?'!r})",
+        flush=True,
+    )
     uvicorn.run(app, host=host, port=port, reload=reload, log_level="info")
     return 0
 
