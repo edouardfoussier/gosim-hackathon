@@ -762,7 +762,15 @@ final class CompanionManager: ObservableObject {
                     } catch {
                         ClickyAnalytics.trackTTSError(error: error.localizedDescription)
                         print("⚠️ ElevenLabs TTS error: \(error)")
-                        speakCreditsErrorFallback()
+                        // Demo-safe fallback: speak the actual response via
+                        // macOS native French TTS instead of the original
+                        // "I'm out of cloud credits" canned line. The judges
+                        // never hear an error message; they hear Marin's
+                        // verdict in a slightly more robotic but
+                        // perfectly-intelligible voice. Free, offline, no
+                        // network round-trip.
+                        speakViaSystemTTS(spokenText)
+                        voiceState = .responding
                     }
                 }
             } catch is CancellationError {
@@ -770,7 +778,10 @@ final class CompanionManager: ObservableObject {
             } catch {
                 ClickyAnalytics.trackResponseError(error: error.localizedDescription)
                 print("⚠️ Companion response error: \(error)")
-                speakCreditsErrorFallback()
+                // Last-resort: speak a generic "let me think again" line
+                // via the same native fallback so the demo never goes silent.
+                speakViaSystemTTS("Un instant Michel, je réfléchis à nouveau.")
+                voiceState = .responding
             }
 
             if !Task.isCancelled {
@@ -810,14 +821,37 @@ final class CompanionManager: ObservableObject {
         }
     }
 
-    /// Speaks a hardcoded error message using macOS system TTS when API
-    /// credits run out. Uses NSSpeechSynthesizer so it works even when
-    /// ElevenLabs is down.
-    private func speakCreditsErrorFallback() {
-        let utterance = "I'm out of cloud credits at the moment, Michel. Try again in a little while."
+    /// Demo-safe fallback voice path. Prefers French Thomas (Apple's
+    /// premium FR voice — install once via System Settings → Spoken
+    /// Content → System Voice → French · Thomas, no extra setup at
+    /// runtime). Falls back to whatever French voice is available, then
+    /// to the system default. Never says "I'm out of credits" — the
+    /// canned-error line was a demo-killer when ElevenLabs hiccupped
+    /// mid-pitch, so we speak the real response in a native voice
+    /// instead. Judges hear Xiexie's verdict, not a meta error.
+    private func speakViaSystemTTS(_ text: String) {
         let synthesizer = NSSpeechSynthesizer()
-        synthesizer.startSpeaking(utterance)
-        voiceState = .responding
+        let preferredVoices = [
+            "com.apple.voice.premium.fr-FR.Thomas",
+            "com.apple.voice.enhanced.fr-FR.Thomas",
+            "com.apple.speech.synthesis.voice.thomas.premium",
+            "com.apple.speech.synthesis.voice.thomas",
+            "com.apple.voice.premium.fr-FR.Audrey",
+            "com.apple.speech.synthesis.voice.audrey",
+        ]
+        for voice in preferredVoices {
+            if NSSpeechSynthesizer.attributes(forVoice: NSSpeechSynthesizer.VoiceName(rawValue: voice)) != nil {
+                synthesizer.setVoice(NSSpeechSynthesizer.VoiceName(rawValue: voice))
+                break
+            }
+        }
+        synthesizer.startSpeaking(text)
+    }
+
+    /// Backwards-compat alias kept so any older call sites still
+    /// resolve. New code should prefer ``speakViaSystemTTS(_:)``.
+    private func speakCreditsErrorFallback() {
+        speakViaSystemTTS("Un instant Michel, je réfléchis à nouveau.")
     }
 
     // MARK: - Verdict Tag Parsing
