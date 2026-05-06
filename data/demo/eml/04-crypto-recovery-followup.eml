@@ -1,0 +1,63 @@
+From: "Daniel Mercer, Asset Recovery" <d.mercer@blockchain-asset-recovery-coalition.org>
+To: edouardfoussier@me.com
+Date: Wed, 06 May 2026 06:24:00 -0700
+Subject: Re: Funds recovery case #BARC-2026-0518 - confirmed match (response required)
+Message-ID: <barc-mchen-0518-followup@b-arc.org>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Return-Path: <noreply@b-arc-mailer.cc>
+Received-SPF: fail (sender IP 162.55.211.83 not authorized)
+Authentication-Results: mx.icloud.com;
+ spf=fail smtp.mailfrom=d.mercer@blockchain-asset-recovery-coalition.org;
+ dkim=none header.i=none;
+ dmarc=fail (p=reject)
+X-Spam-Score: 5.9
+References: <ic3-victim-list-2026-04@ic3-data-share.gov>
+In-Reply-To: <ic3-victim-list-2026-04@ic3-data-share.gov>
+
+Dear Mrs. Chen,
+
+I am following up on the case file referred to our office by an FBI IC3
+partner team. Your name appeared on a victims list recovered during the April
+2026 takedown of a romance-and-investment scam ring operating out of West
+Africa (court documents will be made available to you under seal once your
+identity is verified).
+
+I am pleased to inform you that **$18,420.00 USD** in cryptocurrency, traced
+to a wallet associated with your case, has been frozen in a court-supervised
+escrow and approved for repatriation to verified victims under the United
+States Marshals Service victim-restitution program.
+
+Your refund is currently allocated to you under case ID BARC-2026-0518. To
+release the funds we will need three items:
+
+  1. A small "gas fee" payment of $480.00 in BTC or USDC. This is a
+     non-negotiable network charge - the court does not accept ACH for
+     blockchain repatriation.
+
+  2. A copy of your photo ID (driver license or passport) and a recent
+     utility bill as proof of address.
+
+  3. The wallet address you would like the refund deposited to. If you do
+     not currently hold a crypto wallet, our office can create one for you
+     at no charge during the verification call.
+
+You will receive your full $18,420 within 48 hours of confirmation. The
+recovery window for this batch closes on Wednesday, May 13, 2026 - any funds
+not claimed by that deadline will be forfeited back to the US Marshals
+Service general victim-restitution pool and cannot be reissued.
+
+Please review your case and respond using our secure case portal:
+
+  https://blockchain-asset-recovery-coalition.org/case/BARC-2026-0518/claim
+
+I am personally handling your file and am available through the portal at
+any time. Our coalition has already returned over $46 million to families
+this year and I am looking forward to closing your case for you.
+
+Best regards,
+
+Daniel Mercer
+Senior Asset Recovery Specialist
+Blockchain Asset Recovery Coalition
+In partnership with the FBI Internet Crime Complaint Center (IC3)

@@ -1,0 +1,54 @@
+From: "PG&E Billing Center" <billing-noreply@pge-pay-portal.com>
+To: edouardfoussier@me.com
+Date: Wed, 06 May 2026 07:42:11 -0700
+Subject: FINAL DISCONNECT NOTICE - PG&E account mchen1951 (action required within 60 minutes)
+Message-ID: <pge-disc-7882-mchen1951@pge-pay-portal.com>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Return-Path: <noreply@bulkdrop-billing.ru>
+Received-SPF: fail (pge-pay-portal.com 198.54.117.243 not in pge.com SPF record)
+Authentication-Results: mx.icloud.com;
+ spf=fail smtp.mailfrom=billing-noreply@pge-pay-portal.com;
+ dkim=none header.i=none;
+ dmarc=fail (p=reject)
+X-Spam-Score: 7.1
+X-Originating-IP: [198.54.117.243]
+List-Unsubscribe: <mailto:unsub@pge-pay-portal.com>
+
+Pacific Gas & Electric Company
+Automated Disconnect Notification - DO NOT REPLY
+
+Account holder:  M. CHEN
+PG&E username:   mchen1951
+Service address: on file
+Last 4 of acct:  ...8841
+
+This is an automated FINAL NOTICE that electric and gas service to your address
+is scheduled for IMMEDIATE DISCONNECTION due to one (1) overdue payment of:
+
+  Amount past due:  $487.62
+  Late fee (2026):  $ 38.50
+  Total now due:    $526.12
+
+Field crews have been dispatched to your service area for the 9:00 AM PT
+disconnection window. To prevent disconnection of service to your home you
+must complete payment within sixty (60) minutes of receipt of this notice.
+
+Pay now to keep your service active:
+
+  https://pge-pay-portal.com/quickpay/?u=mchen1951&ref=fnd-526
+
+Acceptable methods: credit card, debit card, prepaid card, or e-gift card.
+Bank ACH and Zelle are not available for emergency reconnection windows under
+California's 2026 peak-season service rules.
+
+If service is disconnected a reconnection fee of $325.00 plus a refundable
+security deposit of $400.00 will apply, and reconnection may take 3-5 business
+days. PG&E has resumed in-person service requirements for senior accounts under
+the 2026 elder protection statute.
+
+Do not reply to this email. For questions please use the secure payment portal
+above.
+
+PG&E Billing Center
+Automated Service Notification

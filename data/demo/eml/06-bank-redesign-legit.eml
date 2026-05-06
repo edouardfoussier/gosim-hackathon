@@ -1,0 +1,53 @@
+From: "Wells Fargo Online" <alerts@e.wellsfargo.com>
+To: edouardfoussier@me.com
+Date: Tue, 05 May 2026 09:00:14 -0700
+Subject: We've redesigned wellsfargo.com - sign on once before May 31 to confirm your preferences
+Message-ID: <wfo-redesign-2026-05-05-mchen@e.wellsfargo.com>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Return-Path: <bounce-wfo@bounce.e.wellsfargo.com>
+Received-SPF: pass (e.wellsfargo.com: domain of bounce-wfo@bounce.e.wellsfargo.com designates 209.34.213.68 as permitted sender)
+Authentication-Results: mx.icloud.com;
+ spf=pass smtp.mailfrom=alerts@e.wellsfargo.com;
+ dkim=pass header.i=@e.wellsfargo.com;
+ dmarc=pass (p=reject)
+X-Spam-Score: 0.4
+List-Unsubscribe: <https://www.wellsfargo.com/online-banking/email-preferences/>, <mailto:unsubscribe@e.wellsfargo.com>
+List-Unsubscribe-Post: List-Unsubscribe=One-Click
+
+Hello MARGARET,
+
+We've redesigned wellsfargo.com to make it easier to bank from any device. As
+part of the rollout, we are asking all online-banking customers to sign on
+once between now and May 31, 2026 so we can:
+
+  - migrate your saved transfers and bill-pay payees to the new layout;
+  - verify the contact information used for security alerts;
+  - reset your accessibility preferences (text size, contrast, audio).
+
+Sign on at any time at:
+
+  https://www.wellsfargo.com
+
+If you do not sign on by May 31, 2026, your saved bill-pay payees will be
+preserved but you will be asked to re-enter your contact details on your
+next sign-on after that date. Your accounts and balances are not affected
+and there is nothing else you need to do.
+
+For your security:
+
+  - Never sign on to your Wells Fargo account by clicking a link in an
+    email. Type wellsfargo.com into your browser, or use the Wells Fargo
+    Mobile app.
+  - Wells Fargo will never ask for your password, PIN, or one-time access
+    code by email, text, or phone.
+
+If you have questions, sign on and message us, or call the number on the
+back of your card.
+
+Wells Fargo Online Banking
+(c) 2026 Wells Fargo Bank, N.A. Member FDIC. Equal Housing Lender.
+
+This email was sent to edouardfoussier@me.com because you are a Wells Fargo
+Online Banking customer. To manage your email preferences, sign on at
+wellsfargo.com or click the unsubscribe link above.

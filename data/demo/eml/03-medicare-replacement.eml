@@ -1,0 +1,54 @@
+From: "Medicare Beneficiary Services" <beneficiary.update@myssa-medicare.gov-portal.com>
+To: edouardfoussier@me.com
+Date: Tue, 05 May 2026 14:22:08 -0700
+Subject: Action required - replacement Medicare card on hold (DOB 09/18/1951)
+Message-ID: <mbs-rpl-39482-1951@gov-portal.com>
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Return-Path: <bounce-mbs@bulkmail-mx.cn>
+Received-SPF: fail (sender IP 91.215.138.74 not authorized for medicare.gov)
+Authentication-Results: mx.icloud.com;
+ spf=fail smtp.mailfrom=beneficiary.update@myssa-medicare.gov-portal.com;
+ dkim=none header.i=none;
+ dmarc=fail (p=reject)
+X-Spam-Score: 6.5
+List-Unsubscribe: <mailto:remove@gov-portal.com>
+
+CENTERS FOR MEDICARE & MEDICAID SERVICES
+Beneficiary Identification Update - 2026 Issuance Cycle
+
+Dear Beneficiary,
+
+Our records indicate that the Medicare card on file for the beneficiary born
+09/18/1951 was issued before the 2018 Beneficiary Identifier reform and is now
+scheduled for replacement under the CMS 2026 Secure Card Initiative
+(directive CMS-2026-117).
+
+Beneficiaries born in or before 1951 are being processed in the FIRST issuance
+wave (May 2026). Your replacement card has been printed and is on hold pending
+identity verification by the beneficiary.
+
+To release your new Medicare card, please confirm the following information on
+our secure beneficiary portal within five (5) business days:
+
+  1. Full legal name and date of birth
+  2. Social Security Number (full 9 digits)
+  3. Current Medicare Beneficiary Identifier (MBI)
+  4. Bank account or debit card to cover the $9.95 expedited shipping fee
+
+Confirm here:
+
+  https://myssa-medicare.gov-portal.com/secure/replace?b=1951&w=01
+
+Failure to verify within five business days may result in temporary suspension
+of Part A and Part B benefits, including any Medicare Advantage or supplemental
+Aetna coverage you may carry, until the replacement card is collected in person
+at a Social Security Administration field office.
+
+This is a one-time notification. For your security, please do not reply to this
+email - use the secure portal only.
+
+Sincerely,
+
+Office of the Beneficiary Administrator
+Centers for Medicare & Medicaid Services

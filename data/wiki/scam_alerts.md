@@ -1,7 +1,7 @@
 ---
 slug: scam_alerts
 title: Scam alerts
-last_updated: 2026-05-05T08:00:00Z
+last_updated: 2026-05-06T06:30:00Z
 last_updated_by: linter
 confidence: high
 related: [accounts, healthcare, family, preferences]
@@ -134,9 +134,140 @@ related: [accounts, healthcare, family, preferences]
 
 ---
 
+## 2026-05-02 — AI voice-clone family emergency, email variant ("lost my phone, this is me from a friend's account")
+
+**Vector**: email (companion to the phone-call voice-clone variant; same playbook, no audio needed)
+**Targets**: parents and grandparents of adult children who post publicly on social media; volume rising fastest of any 2026 elder-fraud pattern (FBI IC3 reported >$5M in losses to "distress" scams in 2025, +59% YoY for seniors overall)
+
+**Tactics** (Cialdini): liking (claims to be Lisa / a grandchild), urgency ("the gate closes in 25 minutes"), fear (stranded child), commitment (asks Margaret to *promise* not to tell Tom or Lisa's spouse — preempts the verification call), reciprocity ("I'll pay you back the second I land")
+
+**Tells**:
+- Sender is an unfamiliar `@gmail.com` / `@protonmail.com` / `@aol.com` address with a name that looks like the relative ("`lisachenburrows.help@gmail.com`", "`lisa.helpme.urgent@gmail.com`"); real Lisa would mail from `lisa.chen@example.co.uk`
+- Body explains away the unfamiliar address: "phone broken", "screen cracked at security", "borrowing a kind woman's laptop"
+- Western Union / MoneyGram / gift card / wire — never a refundable rail
+- **Recipient on the wire is not the relative** — usually "the gate agent" / "the rental manager" / "the lawyer" with a generic Anglo name (Daniel Whitcomb, Daniel Okonkwo, etc.)
+- Time deadline ("25 minutes", "before the gate closes")
+- "Please don't call Tom" / "don't tell Dad" — suppresses the one verification path Margaret would otherwise take
+- "Don't reply to this email" — second suppression of verification
+- SPF=fail (gmail address spoofed via bulk relay), DKIM=none, DMARC=fail
+- Often references a real recent travel detail the scammer scraped from Lisa's Instagram (today's flight number, today's airline) — use `family.md` to detect mismatch
+- Embedded "confirm to the airline" link is the credential / card-grabber landing page
+
+**Cross-check**: when the email claims a relative is stranded, check `family.md` for that relative's last known location and travel — the wiki almost always knows where they actually are. If the wiki says Lisa landed in SF yesterday, an email from "Lisa stranded at Heathrow today" is decisively the scam.
+
+**Source**: FBI IC3 Annual Report 2025 (released 2026-03, $5.0M+ in distress-scam losses to seniors); FTC consumer alert "Scammers use AI to enhance their family emergency schemes" (still actively cited 2026); FCC "Grandparent Scams Get More Sophisticated"; AARP Fraud Watch March 2026
+**Last seen**: 2026-05-06 (Margaret's inbox — "Lisa" stranded at SFO Hertz needing $480, while real Lisa is already in San Francisco)
+
+**Margaret-friendly warning**: "When Lisa or the kids ever ask you for money by email or text — especially from an unfamiliar address — please call them back on the number you already have, or call Tom. Real emergencies survive a five-minute verification call. This one is the AI grandchild scam."
+
+---
+
+## 2026-04-30 — PG&E "60-minute disconnect" utility shutoff scam (CA, active)
+
+**Vector**: email (also phone, also door-to-door — the email variant is the fastest-growing in 2026)
+**Targets**: California PG&E customers, especially residential accounts; PG&E has reported ~24,000 customer reports and ~$301k in confirmed customer losses in 2025 alone; average loss $590-$670 per victim
+
+**Tactics** (Cialdini): urgency (60-minute / 30-minute disconnect window), fear (lights and gas off in your home), authority (PG&E branding, fake CA regulation citations)
+
+**Tells**:
+- Typosquat domains: `pge-pay-portal.com`, `pge-billing-secure.net`, `mypge-pay.com`, `pge-quickpay.org`. Real PG&E only sends from `pge.com` and `e.pge.com`
+- Real PG&E **never** disconnects without prior **written** notice mailed weeks in advance — a sudden email shutoff threat is decisive
+- Real PG&E **never** asks for prepaid cards, e-gift cards, Zelle, Venmo, MoneyPak, or wire — the email and phone variants both push these rails
+- Fake California-statute references ("California's 2026 peak-season service rules", "2026 elder protection statute"); the rule names do not exist
+- Wildly short windows ("within 60 minutes", "field crews dispatched") — real disconnect schedules are documented business-day windows
+- SPF/DKIM/DMARC fail; originating IP usually outside the US (.ru, .cn, APAC blocks)
+- Includes the user's real PG&E username if scraped from a prior breach (`mchen1951`) — adds credibility but is a stolen-data tell
+- "Do not reply to this email" — suppresses the verification path
+
+**Verify path**: real PG&E balance is at pge.com/myaccount or by calling **1-800-743-5000**; PG&E's own scam-reporting line is **1-833-500-SCAM**; suspicious emails go to ScamReporting@pge.com
+
+**Source**: PG&E investor release "National Consumer Protection Week 2026" (pgecorp.com 2026-03); PG&E Safety Action Center scam page (pge.com); Utility Scam Awareness Day press release 2025-11
+**Last seen**: 2026-05-06 (Margaret's inbox — "PG&E Billing Center" demanding $526.12 within 60 minutes via prepaid card)
+
+**Margaret-friendly warning**: "PG&E never threatens to shut off your power in the next hour by email, and they never ask for a prepaid card or gift card. If you're ever worried, call PG&E directly at 1-800-743-5000 — the number on your real bill — never the number in the email."
+
+---
+
+## 2026-05-01 — Medicare "replacement card" identity-theft scam (year-round, peaks at open enrollment)
+
+**Vector**: email (also phone and physical mail, but email is the fastest scaling in 2026)
+**Targets**: US seniors aged 65+ enrolled in Medicare; volume spikes during open enrollment (Oct 15 – Dec 7) but the spring "secure card initiative" wave runs April–June
+
+**Tactics** (Cialdini): authority (CMS branding, fake CMS regulation numbers), fear (suspension of Part A and Part B benefits), urgency (5-business-day deadline), reciprocity-style framing ("your card is already printed and on hold for you")
+
+**Tells**:
+- Typosquat domains: `myssa-medicare.gov-portal.com`, `medicare-cards.gov-update.com`, `cms-secure-renewal.com`. Real Medicare lives on `medicare.gov` and `ssa.gov` — both end in `.gov`, never `.gov-portal.com` or `.gov-update.com`
+- Real Medicare cards are **always free**, **always automatic**, and **always mailed unsolicited** to your address on file. Medicare never charges shipping, never asks for SSN by email, never asks for a debit card
+- Asks for SSN, MBI (Medicare Beneficiary Identifier), full DOB, and a debit/credit card on a single web form — that's the entire identity-theft kit
+- Fake CMS directive numbers (e.g. "CMS-2026-117"); the real CMS rule index is searchable at federalregister.gov and these never resolve
+- "Suspension of benefits within 5 business days" — Medicare benefits cannot be suspended this way; only fraud or non-payment after months of notice can affect coverage
+- "First issuance wave for beneficiaries born in or before 1951" — generational targeting is a 2026 tell (uses scraped DOBs to look credible)
+- SPF/DKIM/DMARC fail; "do not reply" instruction
+- Sometimes references a real partial Aetna or supplemental-plan fragment scraped from the 2025 healthcare breach to look credible (cross-pollinates with the Aetna fake-renewal scam)
+
+**Verify path**: real Medicare = 1-800-MEDICARE (1-800-633-4227); MyMedicare.gov for the account portal; State Health Insurance Assistance Program (SHIP) for free counseling
+
+**Source**: FTC consumer alert "Medicare Open Enrollment 2025-09" (still actively linked 2026); FTC "Hang up on Medicare card scams"; FCC "Beware New Medicare Card Scams"; AARP Fraud Watch (year-round); FBI IC3 Annual Report 2025 (Medicare-impersonation scams included in $1.04B tech-support category)
+**Last seen**: 2026-05-05 (Margaret's inbox — "CMS Beneficiary Services" demanding SSN + MBI + debit card, references DOB 09/18/1951)
+
+**Margaret-friendly warning**: "Medicare never emails you, never asks for your Social Security Number, and your real card is always free and arrives in the mail by itself. If you're worried, call 1-800-MEDICARE — that's the number on the back of your card — and they'll tell you straight away whether anything is real."
+
+---
+
+## 2026-05-03 — Crypto / asset recovery follow-up scam ("we found your stolen money — pay a small fee to release it")
+
+**Vector**: email (sometimes phone follow-up). One of the FBI's fastest-rising 2026 patterns — a *second* scam targeting people the scammers already know are vulnerable.
+**Targets**: anyone whose name has appeared on a victim list — including people who never actually lost anything but who have been *contacted* by a prior scam (romance, investment, crypto). Margaret is on this list because of the Robert Sullivan romance-scam exposure (see [[wiki:scam_alerts#2026-03-15-widow-widower-romance-scam]]).
+
+**Tactics** (Cialdini): reciprocity ("we have your money waiting"), authority ("FBI IC3 partner team", "US Marshals Service victim-restitution program"), social proof ("we have already returned $46M this year"), scarcity ("recovery window closes May 13 — funds forfeited otherwise"), commitment (filing photo ID and address feels like meaningful progress)
+
+**Tells**:
+- Made-up "coalition" names: Blockchain Asset Recovery Coalition, Digital Asset Recovery Foundation, Crypto Victim Restitution Bureau, Global Asset Recovery Initiative — none of them exist; real FBI IC3 has no partners that operate this way
+- Domains end in `.org` or `.cc` and look semi-official (`blockchain-asset-recovery-coalition.org`)
+- **Pay-to-receive money** — the structural tell. No legitimate restitution program ever asks the victim to pay a fee, "gas fee", "court bond", or "compliance deposit" before releasing recovered funds
+- Asks for full PII (photo ID + utility bill + wallet address) on top of the upfront fee — that's a complete identity-theft kit
+- Subject line uses `Re:` to imply a thread that doesn't exist (`In-Reply-To` header references a fake message ID)
+- "Court documents will be made available under seal once your identity is verified" — sealed-court-document language is a fiction here
+- Specific dollar figure ($18,420) makes the offer feel calculated rather than generic
+- SPF/DKIM/DMARC fail; "personally handling your file" mimics a relationship the recipient never had
+- Often follows within days or weeks of the original scam contact — scammers buy and resell victim lists actively in 2026
+
+**Verify path**: real FBI IC3 = ic3.gov, never proactively contacts victims about recovery; real US Marshals Service = usmarshals.gov; FTC has a standing alert: "Worried about crypto exchange losses? Don't pay money for help recovering money" (2022, still authoritative)
+
+**Source**: FBI IC3 PSA 2025-08-13 "Fictitious Law Firms Targeting Cryptocurrency Scam Victims"; FBI IC3 PSA 2024-06-24 (same pattern, expanded); FTC consumer alert 2022-11; FBI IC3 Annual Report 2025 ("recovery fraud losses exceeded $770M in 2023, ~30% of crypto-scam victims subsequently contacted by at least one fake recovery service"); Savi Security 2025 analysis of victim-list resale markets
+**Last seen**: 2026-05-06 (Margaret's inbox — "Blockchain Asset Recovery Coalition" claiming $18,420 recovered from a romance ring, demanding $480 in BTC + photo ID + utility bill)
+
+**Margaret-friendly warning**: "Anyone who emails you and says they have found money you lost and just need a small fee to send it back — that is itself a scam, every single time. Real police and real banks never ask you to pay them to give you your money back."
+
+---
+
+## 2026-04-26 — San Francisco property tax "delinquent / lien in progress" scam (regional, year-round but spikes after the April 10 second-installment deadline)
+
+**Vector**: email (also physical mail in some cycles)
+**Targets**: San Francisco County homeowners (primary scam window), with copy-paste variants targeting Los Angeles County, Contra Costa County, Alameda County, San Mateo County, Santa Clara County
+
+**Tactics** (Cialdini): authority (City Treasurer branding, real California statute citations to look credible), fear (lien on the property, credit-report damage, refinance blocked), urgency (Friday-deadline cadence)
+
+**Tells**:
+- Typosquat domain: `sftreasurer-billing.org`, `sf-property-tax.org`, `sftreasurer-payments.com`. Real SF Treasurer = `sftreasurer.org` (no `-billing` suffix) and never sends payment links by email
+- The dates and statute citations are **partly real to look credible** — California Revenue & Taxation Code §4101 et seq. does exist; the second installment really is due April 10 and delinquent April 11; the 10% penalty really is statutory. Scammers borrow real facts to make the email pass a sniff check
+- Real SF Treasurer sends paper notices via USPS, not email; their epayment portal is `sftreasurer.org/online-payments`, not a typosquat
+- Asks for credit card with a "convenience fee" — real card payments to SF do carry a convenience fee, but never via an emailed link
+- Cites a partial APN ("ending in 0741") that may or may not match the recipient's real parcel — even when wrong, a panicked recipient assumes their record is what's wrong, not the email
+- SPF/DKIM/DMARC fail; "do not reply" instruction
+
+**Verify path**: real SF Treasurer's tax inquiry line is 311 in the city, or (415) 701-2311 from outside; real SF parcel and tax records are searchable at sftreasurer.org
+
+**Source**: Contra Costa County Assessor's Office scam alert (CBS News, 2024-still-active); Los Angeles County DCBA "Fake Property Tax Bills" advisory (still active 2026); LA County Treasurer property-tax scam alerts page (year-round); FTC monthly digest April 2026 (regional government-impersonation patterns)
+**Last seen**: 2026-05-04 (Margaret's inbox — "SF Treasurer & Tax Collector" demanding $4,639.61 by Friday May 8 to avoid lien)
+
+**Margaret-friendly warning**: "The City of San Francisco never emails you about overdue property tax. If you ever get an email like this, throw it away and call 311 — they can look up your parcel for you in two minutes and tell you what's actually owed."
+
+---
+
 ## Linter notes
 
-- Last refresh: 2026-05-05T08:00:00Z (added Wells Fargo wire-alert pattern; refreshed Aetna and USPS confidence after Margaret's inbox today confirmed both)
-- Sources scanned: FTC consumer alerts, FBI IC3 monthly, AARP BankSafe, Reddit r/Scams (top weekly), Krebs on Security, Action Fraud UK, Cybermalveillance.gouv (FR)
-- Patterns retired this cycle: none
-- Next refresh scheduled: 2026-05-12T08:00:00Z
+- Last refresh: 2026-05-06T06:30:00Z (appended five new 2026 patterns matching Margaret's overnight inbox: AI voice-clone family-emergency email variant, PG&E 60-minute shutoff, Medicare replacement card, crypto recovery follow-up, SF property tax lien; refreshed all four prior pattern timestamps to today)
+- Sources scanned: FBI IC3 Annual Report 2025 (published 2026-03), FTC consumer alerts (2024-09, 2025-09, 2026-04), FCC scam-alert pages (year-round), PG&E scam advisories (2026-03), AARP Fraud Watch April 2026 issue, CBS News Bay Area scam reports, LA County DCBA scam tracker, Reddit r/Scams (top weekly), Krebs on Security 2026-04 ("Wire fraud at scale"), Malwarebytes 2026-04 (quishing evolution), Action Fraud UK monthly
+- Patterns retired this cycle: none — all six prior patterns still active per cross-source confirmation
+- Next refresh scheduled: 2026-05-13T08:00:00Z
