@@ -661,7 +661,15 @@ final class BuddyDictationManager: NSObject, ObservableObject {
             "Xcode",
             "Vercel",
             "Next.js",
-            "localhost"
+            "localhost",
+            // Wake-word vocabulary. We bias AssemblyAI toward recognising the
+            // wake-word itself ("Xiexie" gets misheard as "she-she" / "see-see"
+            // without help) and the close-word ("thank you" / "merci") so the
+            // wake-word-initiated conversation flow can detect a clean exit
+            // signal in the streaming partial transcripts.
+            "Xiexie",
+            "thank you",
+            "merci"
         ]
 
         let combinedKeyterms = baseKeyterms + contextualKeyterms
