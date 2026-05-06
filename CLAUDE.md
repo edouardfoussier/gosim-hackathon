@@ -554,6 +554,98 @@ heuristic upgrades that build on the existing skill surface.
 
 ---
 
+## 11c. Status checkpoint — 2026-05-06 morning (T-30h before judging)
+
+> Single-source snapshot before the final sprint. Read this if you're
+> picking up the project mid-stride.
+
+### What ships today (already on `main`)
+
+- **Voice loop**: OpenAI gpt-realtime WebRTC for STT + TTS in browser.
+  Wake word "Xiexie"/"computer" via Chrome `webkitSpeechRecognition`,
+  close word "thank you". Continuous mode toggles via wake/close.
+- **Cursor halo (browser)**: in-page floating element next to the
+  cursor — speaking bars driven by Marin RMS + working dot/label
+  during silent skill execution. Mirrors the native PyQt6
+  `SoundwaveOverlay` for the .app build.
+- **Cursor pointing (browser + native)**: GLM-4.5V emits inline
+  `[POINT:x,y|label]` markers in `read_screen` replies. Backend
+  translates image-space coords to global macOS screen pixels using
+  the capture geometry, broadcasts `point` WS frames. PyQt6
+  `PointerOverlay` paints a chevron + label flag at the target;
+  `<CursorPointer />` renders the same in browser as fallback.
+- **Per-app screen capture**: `read_screen` accepts an `app=` arg
+  and uses `CGWindowListCreateImage` + `kCGWindowImageBoundsIgnoreFraming`
+  to grab a specific window's pixels (Mail, Chrome, Music, …) even
+  when occluded. Falls back to activate-then-grab (osascript) when
+  Quartz returns nil for missing Screen-Recording permission. JPEG
+  resize to 1600 px on longest side prevents the silent empty-reply
+  failure mode from GLM-4.5V on Retina full-screen captures.
+- **Scam shield path**: 7-message demo inbox in `data/demo/inbox.json`
+  with phishing/USPS-redelivery/romance/grey-zone/legit mix.
+  `analyze_email` composes `check_url` (mock fixture for the demo
+  URL) + `search_scam_intel` + `email_rep` + the `scam_alerts.md`
+  wiki + cousin-domain check + GLM-4.6 verdict. Verdict fans out
+  via `bus.broadcast_alert(level, message, url_sandbox=…)` with a
+  pre-cooked sandbox blob (visible link text → final domain →
+  redirect chain → hosting note).
+- **VerdictCard polish**: `<UrlSandboxPreview />` panel inside the
+  card shows the link forensics. Cialdini chips colour-coded by
+  tactic family. 56 px senior-friendly CTAs ("Tell Lisa" / "Archive").
+  `aria-live="polite"` mirror of the spoken paragraph for screen
+  readers.
+- **Working-state broadcasting**: every skill execution path emits
+  `working start/stop` frames with friendly per-skill labels
+  ("looking at your screen", "studying that email", "opening the
+  app", …). Drives the cursor halo's silent-thinking visual.
+- **Demo run-through doc** (`docs/demo-runthrough.md`): solo
+  rehearsal recipe with 8 voice scenarios + 5-minute live judging
+  storyboard table + 30-second panic recipe.
+
+### What's actively in progress
+
+- **Wake-word ONNX training** in Colab — Run All on H100 underway
+  this morning. ~90-110 min if no new bugs. Notebook is
+  Run-All-clean after the cell 1c shim rewrite, the DeepPhonemizer
+  PyTorch 2.6 patch, the cell 6b 22 050 → 16 000 Hz resample, and
+  the cell 8a defensive features-cache reset. **Not on the critical
+  path** for the demo (browser SpeechRecognition fallback is
+  already wired and tested).
+
+### Known gaps (acceptable for the demo)
+
+- `GOOGLE_SAFE_BROWSING_API_KEY`, `URLSCAN_API_KEY`,
+  `EMAILREP_API_KEY`, `TAVILY_API_KEY` — all empty.
+  `analyze_email` runs in mock-fixture mode for the demo URL,
+  which is authoritative. The system prompt still mentions the
+  enrichment though; trim if a judge asks for the GSB call.
+- `PICOVOICE_ACCESS_KEY` empty — wake word relies on Chrome's
+  `webkitSpeechRecognition`, which loses focus when you cmd-tab
+  to Mail.app. Demo workaround: keep the chat tab focused while
+  speaking; only cmd-tab while the agent is reading aloud.
+- Persona drift: `data/wiki/user.md` says Palo Alto / 74; the new
+  inbox uses SF references (SFPL hold, "meeting in San Francisco").
+  Both are fine for the demo if we don't quote both at the same
+  time. Pitch deck should pick one.
+
+### What's queued for this morning (T-30h)
+
+1. **Status checkpoint commit** (this entry) + push.
+2. **Realistic scam emails as `.eml` files** Edouard can drag into
+   his real Mail.app inbox (`edouardfoussier@me.com`) so the demo
+   uses live data instead of the JSON fixture. Sub-agent doing the
+   research + RFC822 generation in parallel.
+3. **Cursor halo redesign** — 4 modes (hidden / idle / speaking /
+   working), 2× bigger sizes than current Clicky-equivalent (senior
+   visibility), tied to `continuousActive` so it's always visible
+   while the conversation loop is open and disappears on "thank
+   you". New "working" mode is a Clicky-style loader spinner, not
+   the previous pulsing dot.
+4. **Pitch deck draft** (Edouard) and dry runs.
+5. **Landing page** — last, when everything else is locked.
+
+---
+
 ## 12. Pitch one-pager (cheat sheet for video)
 
 **Hook (0:00–0:30)**
