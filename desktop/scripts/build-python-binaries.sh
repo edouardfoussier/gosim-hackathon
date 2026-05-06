@@ -117,6 +117,8 @@ build_overlay() {
     --hidden-import overlay \
     --hidden-import overlay.__main__ \
     --hidden-import overlay.glyph \
+    --hidden-import overlay.soundwave \
+    --hidden-import overlay.pointer \
     --hidden-import overlay.ws_client \
     --hidden-import overlay.ns_panel \
     "$SCRIPT_DIR/_pyinstaller_overlay_entry.py"

@@ -3,13 +3,38 @@
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 
 from dotenv import load_dotenv
 
-# Walk up from this file to find a .env at the repo root.
+# Walk up from this file to find a .env at the repo root. Works in dev
+# (`uv run uvicorn …` from the repo) but breaks once we're frozen by
+# PyInstaller and shipped inside Xiexie.app — ``__file__`` then points
+# at a temp directory under the .app bundle, not Edouard's clone.
 _REPO_ROOT = Path(__file__).resolve().parents[2]
-load_dotenv(_REPO_ROOT / ".env")
+
+# When packaged via PyInstaller (Tauri sidecar), ``sys.frozen`` is True
+# and Tauri's ``child::start_backend`` exports ``XIEXIE_DATA_DIR`` =
+# ``~/Library/Application Support/ai.xiexie.desktop/data``. We look
+# there for the user's API keys first, then fall back to the repo
+# .env (dev-time path).
+_FROZEN = bool(getattr(sys, "frozen", False))
+_DATA_DIR_ENV = os.environ.get("XIEXIE_DATA_DIR")
+
+# Resolution order — first hit wins (load_dotenv doesn't override
+# already-set env vars, so the most-specific path goes first).
+_dotenv_candidates: list[Path] = []
+if _DATA_DIR_ENV:
+    _dotenv_candidates.append(Path(_DATA_DIR_ENV) / ".env")
+_dotenv_candidates.append(_REPO_ROOT / ".env")
+
+for _candidate in _dotenv_candidates:
+    if _candidate.exists():
+        load_dotenv(_candidate)
+        # Don't break — load_dotenv silently leaves existing env vars
+        # untouched, so chaining multiple files is harmless and gives
+        # the user-data .env precedence over repo dev defaults.
 
 
 class Config:
@@ -36,9 +61,16 @@ class Config:
     BACKEND_PORT: int = int(os.getenv("BACKEND_PORT", "8787"))
 
     # ─── Paths ────────────────────────────────────────────────────────────
+    # When frozen + Tauri-spawned, XIEXIE_DATA_DIR points at a writable
+    # ``~/Library/Application Support/ai.xiexie.desktop/data`` location.
+    # In dev we keep using the repo's data/ tree so the wiki seed + the
+    # demo inbox fixture are discoverable without an env-var dance.
     REPO_ROOT: Path = _REPO_ROOT
-    WIKI_DIR: Path = Path(os.getenv("WIKI_DIR", _REPO_ROOT / "data" / "wiki")).resolve()
-    RAW_DIR: Path = Path(os.getenv("RAW_DIR", _REPO_ROOT / "data" / "raw")).resolve()
+    _DATA_DEFAULT: Path = (
+        Path(_DATA_DIR_ENV) if _DATA_DIR_ENV else _REPO_ROOT / "data"
+    )
+    WIKI_DIR: Path = Path(os.getenv("WIKI_DIR", _DATA_DEFAULT / "wiki")).resolve()
+    RAW_DIR: Path = Path(os.getenv("RAW_DIR", _DATA_DEFAULT / "raw")).resolve()
 
     @classmethod
     def primary_provider(cls) -> str:
