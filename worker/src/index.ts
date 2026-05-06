@@ -271,11 +271,18 @@ function anthropicToOpenAI(
     openAIMessages.push({ role: message.role, content: openAIContent });
   }
 
+  // Suppress GLM-4.6's "thinking mode" — without this, every reply
+  // burns ~300 tokens on chain-of-thought prefixed in the
+  // ``reasoning_content`` field, which our Anthropic translation
+  // ignores. Result: truncated empty replies on small max_tokens.
+  // ``thinking: { type: "disabled" }`` is the canonical Z.AI knob;
+  // ``extra_body`` is OpenAI's escape hatch the Z.AI proxy honours.
   return {
     model: upstreamModel,
     max_tokens: request.max_tokens ?? 1024,
     stream: isStreaming,
     messages: openAIMessages,
+    thinking: { type: "disabled" },
   };
 }
 
