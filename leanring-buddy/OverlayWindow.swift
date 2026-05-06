@@ -170,7 +170,7 @@ struct BlueCursorView: View {
     private let onboardingVideoPlayerWidth: CGFloat = 330
     private let onboardingVideoPlayerHeight: CGFloat = 186
 
-    private let fullWelcomeMessage = "hey! i'm clicky"
+    private let fullWelcomeMessage = "Hi Michel — I'm Xiexie."
 
     private let navigationPointerPhrases = [
         "right here!",
@@ -189,14 +189,17 @@ struct BlueCursorView: View {
             // Welcome speech bubble (first launch only)
             if isCursorOnThisScreen && showWelcome && !welcomeText.isEmpty {
                 Text(welcomeText)
-                    .font(.system(size: 11, weight: .medium))
+                    // 11 → 18 pt for senior visibility. Padding bumped
+                    // proportionally so the pill doesn't cramp the
+                    // larger glyphs.
+                    .font(.system(size: 18, weight: .medium))
                     .foregroundColor(.white)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
                     .background(
-                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
                             .fill(DS.Colors.overlayCursorBlue)
-                            .shadow(color: DS.Colors.overlayCursorBlue.opacity(0.5), radius: 6, x: 0, y: 0)
+                            .shadow(color: DS.Colors.overlayCursorBlue.opacity(0.5), radius: 10, x: 0, y: 0)
                     )
                     .fixedSize()
                     .overlay(
@@ -214,33 +217,41 @@ struct BlueCursorView: View {
                     }
             }
 
-            // Onboarding video — always in the view tree so opacity animation works
-            // reliably. When no player exists or opacity is 0, nothing is visible.
-            // allowsHitTesting(false) prevents it from intercepting clicks.
-            OnboardingVideoPlayerView(player: companionManager.onboardingVideoPlayer)
-                .frame(width: onboardingVideoPlayerWidth, height: onboardingVideoPlayerHeight)
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                .shadow(color: Color.black.opacity(0.4 * companionManager.onboardingVideoOpacity), radius: 12, x: 0, y: 6)
-                .opacity(isCursorOnThisScreen ? companionManager.onboardingVideoOpacity : 0)
-                .position(
-                    x: cursorPosition.x + 10 + (onboardingVideoPlayerWidth / 2),
-                    y: cursorPosition.y + 18 + (onboardingVideoPlayerHeight / 2)
-                )
-                .animation(.spring(response: 0.2, dampingFraction: 0.6, blendDuration: 0), value: cursorPosition)
-                .animation(.easeInOut(duration: 2.0), value: companionManager.onboardingVideoOpacity)
-                .allowsHitTesting(false)
+            // Onboarding video — INTENTIONALLY DISABLED for the Xiexie
+            // demo. Clicky's intro is a 5-second clip explaining what
+            // the cursor companion does; for our judging-window
+            // pitch the panel header + Michel-Antoine narrative do the
+            // explanation. Re-enable by removing the ``false &&``
+            // guard below if/when we ship a public build with a
+            // proper Xiexie intro clip.
+            if false && isCursorOnThisScreen && companionManager.onboardingVideoOpacity > 0 {
+                OnboardingVideoPlayerView(player: companionManager.onboardingVideoPlayer)
+                    .frame(width: onboardingVideoPlayerWidth, height: onboardingVideoPlayerHeight)
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .shadow(color: Color.black.opacity(0.4 * companionManager.onboardingVideoOpacity), radius: 12, x: 0, y: 6)
+                    .opacity(companionManager.onboardingVideoOpacity)
+                    .position(
+                        x: cursorPosition.x + 10 + (onboardingVideoPlayerWidth / 2),
+                        y: cursorPosition.y + 18 + (onboardingVideoPlayerHeight / 2)
+                    )
+                    .animation(.spring(response: 0.2, dampingFraction: 0.6, blendDuration: 0), value: cursorPosition)
+                    .animation(.easeInOut(duration: 2.0), value: companionManager.onboardingVideoOpacity)
+                    .allowsHitTesting(false)
+            }
 
             // Onboarding prompt — "press control + option and say hi" streamed after video ends
             if isCursorOnThisScreen && companionManager.showOnboardingPrompt && !companionManager.onboardingPromptText.isEmpty {
                 Text(companionManager.onboardingPromptText)
-                    .font(.system(size: 11, weight: .medium))
+                    // 11 → 18 pt for senior visibility, same scale as
+                    // the welcome bubble.
+                    .font(.system(size: 18, weight: .medium))
                     .foregroundColor(.white)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 8)
                     .background(
-                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
                             .fill(DS.Colors.overlayCursorBlue)
-                            .shadow(color: DS.Colors.overlayCursorBlue.opacity(0.5), radius: 6, x: 0, y: 0)
+                            .shadow(color: DS.Colors.overlayCursorBlue.opacity(0.5), radius: 10, x: 0, y: 0)
                     )
                     .fixedSize()
                     .overlay(
@@ -263,16 +274,22 @@ struct BlueCursorView: View {
             // glow that settles, creating a "materializing" effect.
             if buddyNavigationMode == .pointingAtTarget && !navigationBubbleText.isEmpty {
                 Text(navigationBubbleText)
-                    .font(.system(size: 11, weight: .medium))
+                    // The arrival pill labels the element Xiexie just
+                    // pointed at ("the Reply button", "the suspicious
+                    // link"). Bumped 11 → 20 pt — labels need to be
+                    // legible from across Michel's living room
+                    // because the demo storyboard cuts to the screen
+                    // here and the judges read along.
+                    .font(.system(size: 20, weight: .semibold))
                     .foregroundColor(.white)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 10)
                     .background(
-                        RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        RoundedRectangle(cornerRadius: 12, style: .continuous)
                             .fill(DS.Colors.overlayCursorBlue)
                             .shadow(
                                 color: DS.Colors.overlayCursorBlue.opacity(0.5 + (1.0 - navigationBubbleScale) * 1.0),
-                                radius: 6 + (1.0 - navigationBubbleScale) * 16,
+                                radius: 10 + (1.0 - navigationBubbleScale) * 24,
                                 x: 0, y: 0
                             )
                     )
@@ -304,9 +321,12 @@ struct BlueCursorView: View {
             // timer controls position directly at 60fps for a smooth arc flight.
             Triangle()
                 .fill(DS.Colors.overlayCursorBlue)
-                .frame(width: 16, height: 16)
+                // Bumped 16 → 36 (2.25×) for Michel's eyesight. Glow radius
+                // scaled in proportion so the cursor still feels light, not
+                // heavy.
+                .frame(width: 36, height: 36)
                 .rotationEffect(.degrees(triangleRotationDegrees))
-                .shadow(color: DS.Colors.overlayCursorBlue, radius: 8 + (buddyFlightScale - 1.0) * 20, x: 0, y: 0)
+                .shadow(color: DS.Colors.overlayCursorBlue, radius: 16 + (buddyFlightScale - 1.0) * 32, x: 0, y: 0)
                 .scaleEffect(buddyFlightScale)
                 .opacity(buddyIsVisibleOnThisScreen && (companionManager.voiceState == .idle || companionManager.voiceState == .responding) ? cursorOpacity : 0)
                 .position(cursorPosition)
@@ -714,12 +734,15 @@ private struct BlueCursorWaveformView: View {
 
     var body: some View {
         TimelineView(.animation(minimumInterval: 1.0 / 36.0)) { timelineContext in
-            HStack(alignment: .center, spacing: 2) {
+            // Bumped from Clicky's 2 px bars / 2 px gap / max ~14 px tall
+            // to 5 px bars / 5 px gap / max ~36 px tall — same waveform
+            // beat, just sized for Michel's reading distance.
+            HStack(alignment: .center, spacing: 5) {
                 ForEach(0..<barCount, id: \.self) { barIndex in
-                    RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+                    RoundedRectangle(cornerRadius: 3, style: .continuous)
                         .fill(DS.Colors.overlayCursorBlue)
                         .frame(
-                            width: 2,
+                            width: 5,
                             height: barHeight(
                                 for: barIndex,
                                 timelineDate: timelineContext.date
@@ -727,7 +750,7 @@ private struct BlueCursorWaveformView: View {
                         )
                 }
             }
-            .shadow(color: DS.Colors.overlayCursorBlue.opacity(0.6), radius: 6, x: 0, y: 0)
+            .shadow(color: DS.Colors.overlayCursorBlue.opacity(0.6), radius: 12, x: 0, y: 0)
             .animation(.linear(duration: 0.08), value: audioPowerLevel)
         }
     }
@@ -736,9 +759,11 @@ private struct BlueCursorWaveformView: View {
         let animationPhase = CGFloat(timelineDate.timeIntervalSinceReferenceDate * 3.6) + CGFloat(barIndex) * 0.35
         let normalizedAudioPowerLevel = max(audioPowerLevel - 0.008, 0)
         let easedAudioPowerLevel = pow(min(normalizedAudioPowerLevel * 2.85, 1), 0.76)
-        let reactiveHeight = easedAudioPowerLevel * 10 * listeningBarProfile[barIndex]
-        let idlePulse = (sin(animationPhase) + 1) / 2 * 1.5
-        return 3 + reactiveHeight + idlePulse
+        // Reactive amplitude 10 → 24, idle pulse 1.5 → 3.5, baseline 3 → 7.
+        // Same scale ratio (2.25×) as the triangle cursor.
+        let reactiveHeight = easedAudioPowerLevel * 24 * listeningBarProfile[barIndex]
+        let idlePulse = (sin(animationPhase) + 1) / 2 * 3.5
+        return 7 + reactiveHeight + idlePulse
     }
 }
 
@@ -760,11 +785,13 @@ private struct BlueCursorSpinnerView: View {
                     ],
                     center: .center
                 ),
-                style: StrokeStyle(lineWidth: 2.5, lineCap: .round)
+                // Stroke 2.5 → 5 px, frame 14 → 32 px (2.25× to match
+                // the triangle + waveform). Glow radius scaled too.
+                style: StrokeStyle(lineWidth: 5, lineCap: .round)
             )
-            .frame(width: 14, height: 14)
+            .frame(width: 32, height: 32)
             .rotationEffect(.degrees(isSpinning ? 360 : 0))
-            .shadow(color: DS.Colors.overlayCursorBlue.opacity(0.6), radius: 6, x: 0, y: 0)
+            .shadow(color: DS.Colors.overlayCursorBlue.opacity(0.6), radius: 12, x: 0, y: 0)
             .onAppear {
                 withAnimation(.linear(duration: 0.8).repeatForever(autoreverses: false)) {
                     isSpinning = true

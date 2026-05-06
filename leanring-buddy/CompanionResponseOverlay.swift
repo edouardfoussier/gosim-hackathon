@@ -196,7 +196,10 @@ private struct CompanionResponseOverlayView: View {
     var body: some View {
         if viewModel.isShowingResponse {
             Text(viewModel.streamingResponseText.isEmpty ? "..." : viewModel.streamingResponseText)
-                .font(.system(size: 13, weight: .regular))
+                // Was 13 pt — bumped to 19 pt so the streaming
+                // response bubble (the live caption while Marin
+                // speaks) is readable at Michel's reading distance.
+                .font(.system(size: 19, weight: .regular))
                 .foregroundColor(DS.Colors.textPrimary)
                 .lineSpacing(3)
                 .fixedSize(horizontal: false, vertical: true)
