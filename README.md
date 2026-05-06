@@ -1,162 +1,247 @@
-Update: April 27, 2026.
+# Xiexie 谢谢 — your AI grandchild
 
-Hi there! I'm Farza, the guy that made Clicky.
+A voice-first macOS companion that protects seniors from email scams,
+reads their screen out loud, and points at things they can't find.
+Forked from [Farza's Clicky](https://github.com/farzaa/clicky) (MIT)
+and re-tuned end-to-end for **Z.AI's GLM-4.6 + GLM-4.5V**.
 
-The existing codebase remains open source. Tinker with it, make it yours, start a company out of it, do whatever you want I don't mind. But, for all the new stuff I'm hacking on, gonna keep it private. To get the latest Clicky, you can go [here](https://www.heyclicky.com/).
+Built in 36 hours at the **GOSIM 2026 Agentic Hackathon** (Paris,
+May 5–6) for the **Z.AI Innovation track**. The demo persona is
+**Michel Antoine**, 78, retired in Anglet, France, who lives alone
+since his wife passed two years ago. His daughter Sophie lives in
+London. Most days, the riskiest thing on his computer is the next
+email pretending to be the *Caisse Primaire d'Assurance Maladie*.
 
-I also tweeted about this [here](https://x.com/FarzaTV/status/2043402737828962489).
+> "When your grandchild is busy, your computer can be the next best
+> thing. Just say… *Xiexie*."
 
-Go crazy with this repo!! It's an MIT license.
+---
 
-# Hi, this is Clicky.
-It's an AI teacher that lives as a buddy next to your cursor. It can see your screen, talk to you, and even point at stuff. Kinda like having a real teacher next to you.
+## What it does
 
-Download it [here](https://www.clicky.so/) for free.
+**Hold Control + Option** anywhere on macOS to talk to Xiexie. Release
+to send. Xiexie sees your screen, hears you, replies via warm voice,
+and can fly an ember-orange cursor to specific UI elements you should
+look at — including the suspicious link inside a phishing email.
 
-Here's the [original tweet](https://x.com/FarzaTV/status/2041314633978659092) that kinda blew up for a demo for more context.
+The flagship beat is the **scam shield**. When Michel asks
+*"Is this email a scam?"*, GLM-4.5V reads the Mail.app screenshot,
+spots the typosquat domain, the SPF/DMARC mismatch, the urgency-and-
+fear language, and replies in Michel's voice:
 
-![Clicky — an ai buddy that lives on your mac](clicky-demo.gif)
+> *"Michel, this is a scam. The sender pretends to be the CPAM but
+> the address ends in `.ru` — that's Russia. Don't click, don't
+> reply. If you're worried about your Carte Vitale, call the number
+> printed on the card itself."*
 
-This is the open-source version of Clicky for those that want to hack on it, build their own features, or just see how it works under the hood.
+…then the cursor flies to the suspicious link with a label that says
+*the fake link*, in 20 pt so Michel sees it from across the kitchen.
 
-## Get started with Claude Code
+[Demo video coming.]
 
-The fastest way to get this running is with [Claude Code](https://docs.anthropic.com/en/docs/claude-code).
+---
 
-Once you get Claude running, paste this:
+## What's different from upstream Clicky
 
-```
-Hi Claude.
+| Layer | Clicky | Xiexie |
+|---|---|---|
+| LLM orchestrator | Anthropic Claude Sonnet 4.6 | **Z.AI GLM-4.6** (text) + **GLM-4.5V** (vision, auto-routed) |
+| Worker proxy | direct passthrough to Anthropic | **Anthropic ↔ OpenAI translator**: Swift app's payload format unchanged, Worker rewrites to Z.AI ChatCompletions and re-emits the upstream OpenAI SSE as Anthropic events |
+| Persona | "AI teacher" for general computer help | "AI grandchild" for a 78-year-old, scam-shield as the top mission |
+| UI scale | tuned for millennials | every cursor + label + waveform 2.25× larger; panel 1.6× wider; ember warm palette instead of tech-blue |
+| Wake | only Ctrl+Option push-to-talk | Ctrl+Option *and* a custom-trained openWakeWord ONNX for *"Xiexie"* (training pipeline + 944 user recordings ship in `training/wakeword/` — runtime integration on `feat/wakeword-realtime`, in flight) |
+| Demo data | none | six RFC822 `.eml` fixtures of currently-active 2026 European scam patterns, drag-droppable into Mail.app for the judging panel |
 
-Clone https://github.com/farzaa/clicky.git into my current directory.
+The Swift code change for the LLM swap is one line — the heavy lifting
+is in the Worker (`worker/src/index.ts`). That keeps the upstream Clicky
+codebase the source of truth on everything voice + cursor + screen
+capture, and isolates Xiexie's contributions as a small, reviewable diff.
 
-Then read the CLAUDE.md. I want to get Clicky running locally on my Mac.
+---
 
-Help me set up everything — the Cloudflare Worker with my own API keys, the proxy URLs, and getting it building in Xcode. Walk me through it.
-```
-
-That's it. It'll clone the repo, read the docs, and walk you through the whole setup. Once you're running you can just keep talking to it — build features, fix bugs, whatever. Go crazy.
-
-## Manual setup
-
-If you want to do it yourself, here's the deal.
+## Setup (15 minutes from a fresh Mac)
 
 ### Prerequisites
 
 - macOS 14.2+ (for ScreenCaptureKit)
-- Xcode 15+
-- Node.js 18+ (for the Cloudflare Worker)
-- A [Cloudflare](https://cloudflare.com) account (free tier works)
-- API keys for: [Anthropic](https://console.anthropic.com), [AssemblyAI](https://www.assemblyai.com), [ElevenLabs](https://elevenlabs.io)
+- Xcode 15+ — App Store
+- Node.js 18+ — `brew install node`
+- A free Cloudflare account
+- Three API keys (all have free tiers; combined ≈ €0 for a few demos):
+  - **Z.AI** — https://docs.z.ai/api-reference/introduction
+  - **AssemblyAI** — https://www.assemblyai.com/app/account/keys (streaming STT)
+  - **ElevenLabs** — https://elevenlabs.io/app/settings/api-keys (warm TTS)
 
-### 1. Set up the Cloudflare Worker
-
-The Worker is a tiny proxy that holds your API keys. The app talks to the Worker, the Worker talks to the APIs. This way your keys never ship in the app binary.
+### Clone + Worker
 
 ```bash
+git clone https://github.com/edouardfoussier/gosim-hackathon.git xiexie
+cd xiexie
+git checkout feat/clicky-fork
+
 cd worker
+cp .dev.vars.example .dev.vars
+# Edit .dev.vars and paste the three keys.
 npm install
-```
-
-Now add your secrets. Wrangler will prompt you to paste each one:
-
-```bash
-npx wrangler secret put ANTHROPIC_API_KEY
-npx wrangler secret put ASSEMBLYAI_API_KEY
-npx wrangler secret put ELEVENLABS_API_KEY
-```
-
-For the ElevenLabs voice ID, open `wrangler.toml` and set it there (it's not sensitive):
-
-```toml
-[vars]
-ELEVENLABS_VOICE_ID = "your-voice-id-here"
-```
-
-Deploy it:
-
-```bash
-npx wrangler deploy
-```
-
-It'll give you a URL like `https://your-worker-name.your-subdomain.workers.dev`. Copy that.
-
-### 2. Run the Worker locally (for development)
-
-If you want to test changes to the Worker without deploying:
-
-```bash
-cd worker
 npx wrangler dev
 ```
 
-This starts a local server (usually `http://localhost:8787`) that behaves exactly like the deployed Worker. You'll need to create a `.dev.vars` file in the `worker/` directory with your keys:
+Wrangler runs the Worker locally at `http://127.0.0.1:8787`. Leave that
+terminal open for the rest of the session.
 
-```
-ANTHROPIC_API_KEY=sk-ant-...
-ASSEMBLYAI_API_KEY=...
-ELEVENLABS_API_KEY=...
-ELEVENLABS_VOICE_ID=...
-```
-
-Then update the proxy URLs in the Swift code to point to `http://localhost:8787` instead of the deployed Worker URL while developing. Grep for `clicky-proxy` to find them all.
-
-### 3. Update the proxy URLs in the app
-
-The app has the Worker URL hardcoded in a few places. Search for `your-worker-name.your-subdomain.workers.dev` and replace it with your Worker URL:
-
-```bash
-grep -r "clicky-proxy" leanring-buddy/
-```
-
-You'll find it in:
-- `CompanionManager.swift` — Claude chat + ElevenLabs TTS
-- `AssemblyAIStreamingTranscriptionProvider.swift` — AssemblyAI token endpoint
-
-### 4. Open in Xcode and run
+### Build the Mac app
 
 ```bash
 open leanring-buddy.xcodeproj
 ```
 
 In Xcode:
-1. Select the `leanring-buddy` scheme (yes, the typo is intentional, long story)
-2. Set your signing team under Signing & Capabilities
-3. Hit **Cmd + R** to build and run
 
-The app will appear in your menu bar (not the dock). Click the icon to open the panel, grant the permissions it asks for, and you're good.
+1. Select the `leanring-buddy` scheme (yes, the typo's intentional —
+   Clicky's original project name was *Learning Buddy*; we keep the
+   path so the upstream patch surface stays small)
+2. Signing & Capabilities → set your Team (a free Apple ID is fine for
+   local builds)
+3. Cmd+R
 
-### Permissions the app needs
+The app installs in the menu bar (no Dock icon, no Cmd-Tab entry). Click
+the tray icon, grant the four permission prompts (Microphone,
+Accessibility, Screen Recording, Screen Content), and you're live.
 
-- **Microphone** — for push-to-talk voice capture
-- **Accessibility** — for the global keyboard shortcut (Control + Option)
-- **Screen Recording** — for taking screenshots when you use the hotkey
-- **Screen Content** — for ScreenCaptureKit access
+### Drop the demo emails into Mail.app (optional, for the scam-shield path)
+
+```bash
+cd data/demo/eml
+python3 build_mbox.py
+# Then in Mail.app: File → Import Mailboxes → Files in mbox format
+# → select data/demo/eml/ → Continue → drag the imports into your Inbox.
+```
+
+`data/demo/eml/README.md` has the full recipe + an `osascript` to mark
+all six unread in one shot.
+
+---
 
 ## Architecture
 
-If you want the full technical breakdown, read `CLAUDE.md`. But here's the short version:
+```
+                ┌──────────────────────────┐
+                │  Xiexie.app (Swift)      │
+                │  • menu bar panel        │
+                │  • ScreenCaptureKit      │
+                │  • ⌃⌥ push-to-talk       │
+                │  • ember cursor overlay  │
+                │  • [POINT:x,y] pointing  │
+                └────────────┬─────────────┘
+                             │ HTTP / WS
+                             ▼
+                ┌──────────────────────────┐
+                │  Cloudflare Worker        │
+                │  • /chat (LLM)           │
+                │  • /tts (TTS)            │
+                │  • /transcribe-token     │
+                └──┬──────────┬──────────┬─┘
+                   │          │          │
+        ┌──────────┘          │          └──────────┐
+        ▼                     ▼                     ▼
+  Z.AI GLM-4.6           ElevenLabs            AssemblyAI
+  Z.AI GLM-4.5V             (TTS)            (streaming STT)
+  (auto-routed
+   on image input)
+```
 
-**Menu bar app** (no dock icon) with two `NSPanel` windows — one for the control panel dropdown, one for the full-screen transparent cursor overlay. Push-to-talk streams audio over a websocket to AssemblyAI, sends the transcript + screenshot to Claude via streaming SSE, and plays the response through ElevenLabs TTS. Claude can embed `[POINT:x,y:label:screenN]` tags in its responses to make the cursor fly to specific UI elements across multiple monitors. All three APIs are proxied through a Cloudflare Worker.
+The Worker's `/chat` route is the only non-trivial piece. It accepts the
+Mac app's existing Anthropic Messages payload, walks the content blocks,
+translates `image/source/base64` to OpenAI's `image_url/data:` form,
+forwards to Z.AI's OpenAI-compatible endpoint with `thinking: { type:
+"disabled" }` (otherwise GLM-4.6's chain-of-thought prefix burns the
+token budget before the actual reply lands), and re-emits the OpenAI
+SSE stream back to Swift as Anthropic-shaped `content_block_delta`
+events. The Mac app stays unchanged on the LLM seam.
+
+---
 
 ## Project structure
 
 ```
-leanring-buddy/          # Swift source (yes, the typo stays)
-  CompanionManager.swift    # Central state machine
-  CompanionPanelView.swift  # Menu bar panel UI
-  ClaudeAPI.swift           # Claude streaming client
-  ElevenLabsTTSClient.swift # Text-to-speech playback
-  OverlayWindow.swift       # Blue cursor overlay
-  AssemblyAI*.swift         # Real-time transcription
-  BuddyDictation*.swift     # Push-to-talk pipeline
-worker/                  # Cloudflare Worker proxy
-  src/index.ts              # Three routes: /chat, /tts, /transcribe-token
-CLAUDE.md                # Full architecture doc (agents read this)
+leanring-buddy/                  # Swift sources (typo kept from Clicky)
+  CompanionManager.swift           # Central state machine
+  CompanionPanelView.swift         # Menu bar panel UI (Xiexie-rebranded)
+  ClaudeAPI.swift                  # LLM streaming client (now talks to Z.AI via Worker)
+  ElevenLabsTTSClient.swift        # Text-to-speech playback
+  OverlayWindow.swift              # Ember cursor + 2.25× labels (was 1× blue)
+  AssemblyAI*.swift                # Real-time transcription
+  BuddyDictation*.swift            # Push-to-talk pipeline
+  DesignSystem.swift               # Color tokens — ember palette overrides Clicky's blue scale
+  Assets.xcassets/                 # Ember-recolored AppIcon (was Clicky's blue triangle)
+worker/
+  src/index.ts                     # Anthropic ↔ Z.AI/OpenAI translator
+  wrangler.toml                    # Public vars (model names, voice ID)
+  .dev.vars.example                # Template for the three secret keys
+data/
+  demo/eml/                        # Six 2026 European scam .eml fixtures
+  wiki/                            # Michel Antoine persona seed
+training/wakeword/                 # openWakeWord training pipeline + Colab notebook
+                                   # — produces xiexie.onnx (13.7 KB) for the
+                                   # always-on "Xiexie" wake word path on
+                                   # branch feat/wakeword-realtime
+docs/demo-runthrough.md            # Solo rehearsal recipe + 5-min judging storyboard
+AGENTS.md                          # Original Clicky architecture doc (kept verbatim)
+XIEXIE_SETUP.md                    # Xiexie-specific setup notes
+XIEXIE_LEGACY.md                   # Pre-fork engineering log (decisions, ADRs)
 ```
 
-## Contributing
+---
 
-PRs welcome. If you're using Claude Code, it already knows the codebase — just tell it what you want to build and point it at `CLAUDE.md`.
+## Built for GOSIM 2026 — Z.AI Innovation track
 
-Got feedback? DM me on X [@farzatv](https://x.com/farzatv).
+We targeted the rubric's four 20%-weight columns honestly:
+
+- **Innovation** — The judging-floor signature is the
+  scam-shield narrative for seniors. Forty-six other teams registered
+  and zero of them target elder protection on macOS. The framing — *"AI
+  grandchild that protects, remembers, and never sleeps"* — is the
+  moat, not the tech stack underneath it.
+- **Technical depth** — End-to-end: a custom-trained openWakeWord
+  ONNX classifier (`training/wakeword/xiexie_wakeword_training.ipynb`),
+  a Cloudflare Worker that translates two LLM API contracts in
+  streaming SSE, GLM-4.5V vision routed automatically by the same
+  Worker on image-bearing requests, and a Karpathy LLM-Wiki memory
+  pattern in `data/wiki/` so the agent's context grows after each
+  conversation.
+- **Practicality** — The fork strategy itself is the practicality
+  beat: rather than build a Mac app from scratch in 36 hours, we forked
+  Clicky's MIT-licensed shell, rebranded the surfaces a senior actually
+  sees, and swapped the LLM seam. That gave us a real `.app` with
+  ScreenCaptureKit, global push-to-talk, multi-monitor cursor pointing,
+  and Cmd-Q lifecycle on day one — features that would have eaten the
+  whole hackathon to rebuild.
+- **Presentation** — The demo lives or dies on one beat:
+  Michel asks *"is this email a scam?"* about a real-looking CPAM
+  phishing fixture, GLM-4.5V reads the screen, and the ember cursor
+  flies to the fake link with a 20 pt label. We optimised the build
+  for that one moment landing reliably.
+
+We're a one-person team. There's a long list of follow-on work
+(`feat/wakeword-realtime` is in flight as we write this; the wiki
+linter pipeline isn't running yet; the French dub-track on the demo
+prompt is hand-tuned, not data-driven). Treat this README as a
+checkpoint, not a finished product.
+
+---
+
+## Credits + license
+
+This project is a fork of [Clicky by Farza](https://github.com/farzaa/clicky)
+and inherits its **MIT license** verbatim. Every Swift source file in
+`leanring-buddy/` is a derivative of Clicky; please give Farza credit
+if you build on top.
+
+The Xiexie persona, the scam-shield system prompt, the Worker LLM
+translator, the ember palette, the senior-scale UI, the
+openWakeWord-Xiexie training pipeline, and the European demo fixtures
+are by Edouard Foussier, also under MIT. Pull requests welcome.
+
+Got feedback? Find me on
+[GitHub](https://github.com/edouardfoussier) or use the **Call
+Edouard** button inside the app — it's a live FaceTime to my phone.
