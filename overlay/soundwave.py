@@ -52,17 +52,20 @@ from .ns_panel import promote_to_panel
 
 
 # ── geometry ──────────────────────────────────────────────────────────────
-WINDOW_W = 180
-WINDOW_H = 180
-INNER_W = 64           # the painted pill is 64 wide
-INNER_H = 64           # ...and 64 tall — matches the spec
-BAR_COUNT = 5
-BAR_WIDTH = 3          # logical px (devicePixelRatio applied at paint time)
-BAR_GAP = 4
-PILL_RADIUS = 32       # full half-height — gives us a true pill
-CURSOR_OFFSET_X = 32   # how far from the cursor's hotspot the pill sits
-CURSOR_OFFSET_Y = 32   # (bottom-right by default — same as Clicky)
-CURSOR_FOLLOW_MS = 60  # match glyph.py's cadence
+# All visual sizes were doubled for the senior-demo pass — Margaret has mild
+# visual impairment and the demo is judged at 2–3 m from the screen, so
+# every overlay surface needs to be roughly 2× its v1 dimensions.
+WINDOW_W = 360         # was 180 (v1)
+WINDOW_H = 360         # was 180 (v1)
+INNER_W = 128          # was 64 (v1) — the painted pill is now 128 wide
+INNER_H = 128          # was 64 (v1) — ...and 128 tall
+BAR_COUNT = 5          # locked — bumping count would change the visual signature
+BAR_WIDTH = 6          # was 3 (v1) — logical px (devicePixelRatio applied at paint time)
+BAR_GAP = 8            # was 4 (v1)
+PILL_RADIUS = 64       # was 32 (v1) — full half-height = true pill
+CURSOR_OFFSET_X = 32   # unchanged — bigger pill now overlaps the cursor more (intentional)
+CURSOR_OFFSET_Y = 32   # unchanged — same as above
+CURSOR_FOLLOW_MS = 60  # animation cadence — unchanged per spec
 
 # ── motion ───────────────────────────────────────────────────────────────
 PROCEDURAL_FPS = 30                    # 30 fps is plenty for 5 bars
@@ -155,22 +158,18 @@ class _SoundwaveCanvas(QWidget):
         group_width = BAR_COUNT * BAR_WIDTH + (BAR_COUNT - 1) * BAR_GAP
         x0 = (INNER_W - group_width) / 2.0
         cy = INNER_H / 2.0
-        max_height = INNER_H - 12.0   # 6 px breathing room top + bottom
-        min_height = 6.0              # never collapse to 0 — ugly snap
-        radius = BAR_WIDTH / 2.0      # rounded ends — matches Clicky
+        max_height = INNER_H - 24.0   # was 12.0 (v1) — 12 px breathing room top + bottom
+        min_height = 12.0             # was 6.0 (v1) — never collapse to 0
+        radius = BAR_WIDTH / 2.0      # rounded ends — auto-scales with BAR_WIDTH
 
         painter.setPen(Qt.PenStyle.NoPen)
         for i, normalised in enumerate(self._bars):
             h = min_height + (max_height - min_height) * normalised
             x = x0 + i * (BAR_WIDTH + BAR_GAP)
             y = cy - h / 2.0
-            # Subtle two-stop gradient: top a touch lighter so the bars
-            # have a hint of lift on a cream background. We fake it with
-            # two overlapping rects to avoid spinning up a gradient
-            # object every frame.
             painter.setBrush(BAR_COLOR)
             painter.drawRoundedRect(QRectF(x, y, BAR_WIDTH, h), radius, radius)
-            highlight_h = min(h * 0.35, 8.0)
+            highlight_h = min(h * 0.35, 16.0)   # was 8.0 (v1)
             painter.setBrush(BAR_COLOR_TOP)
             painter.drawRoundedRect(
                 QRectF(x, y, BAR_WIDTH, highlight_h), radius, radius

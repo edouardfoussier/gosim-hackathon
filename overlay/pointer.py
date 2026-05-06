@@ -65,11 +65,13 @@ from .ns_panel import promote_to_panel
 # ── geometry ──────────────────────────────────────────────────────────────
 # The window is square and centred on the target. We need enough room
 # for the outermost expanding ring plus the label flag offset.
-WINDOW_SIZE = 280
-RING_BASE_RADIUS = 12.0
-RING_MAX_RADIUS = 36.0
-RING_COUNT = 3
-LABEL_OFFSET = QPoint(28, 28)  # bottom-right of the centre, like a real cursor
+# Sizes doubled for the senior-demo pass (2026-05-06); WINDOW_SIZE clamped
+# to the 520 px ceiling so the surface still fits a 1440×900 MacBook Air.
+WINDOW_SIZE = 520              # was 280 (v1) — 2× would be 560, clamped at 520 cap
+RING_BASE_RADIUS = 24.0        # was 12.0 (v1)
+RING_MAX_RADIUS = 72.0         # was 36.0 (v1)
+RING_COUNT = 3                 # locked — visual signature
+LABEL_OFFSET = QPoint(56, 56)  # was QPoint(28, 28) (v1) — bottom-right of the centre
 
 # Visual palette — matches the ember accent the rest of the surfaces use.
 EMBER_PRIMARY = QColor("#B05826")   # warm orange-brown
@@ -128,7 +130,7 @@ class PointerOverlay(QWidget):
         self._hide_timer.setSingleShot(True)
         self._hide_timer.timeout.connect(self.hide)
 
-        self._font = QFont("Inter", 13, QFont.Weight.DemiBold)
+        self._font = QFont("Inter", 17, QFont.Weight.DemiBold)  # was 13 pt (v1) — +4 pt for senior readability
         # AppKit fallback for hosts without Inter installed.
         self._font.setStyleHint(QFont.StyleHint.SansSerif)
 
@@ -211,7 +213,7 @@ class PointerOverlay(QWidget):
             ring_alpha = int((1.0 - ring_phase) * 200)
             color = QColor(EMBER_PRIMARY)
             color.setAlpha(ring_alpha)
-            pen = QPen(color, 2.5)
+            pen = QPen(color, 4.0)   # was 2.5 (v1) — heavier stroke for proportional 2× scaling
             painter.setPen(pen)
             painter.setBrush(Qt.BrushStyle.NoBrush)
             painter.drawEllipse(QRectF(cx - radius, cy - radius, radius * 2, radius * 2))
@@ -219,18 +221,18 @@ class PointerOverlay(QWidget):
         # ── solid centre dot ──────────────────────────────────────────
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(EMBER_PRIMARY)
-        painter.drawEllipse(QRectF(cx - 5.5, cy - 5.5, 11, 11))
+        # Dot diameter was 11 (v1) — doubled to 22 for senior visibility.
+        painter.drawEllipse(QRectF(cx - 11, cy - 11, 22, 22))
 
         # ── chevron tail leading the eye to the label ────────────────
         # Triangle pointing toward the label offset (down-right).
+        # All offsets doubled from v1 (was 7/14/4) for the senior demo pass.
         tail = QPainterPath()
-        # Three-stop "comet" trail: start at centre offset 6 px in the
-        # chevron direction, then a wider triangular blob.
-        tail_start_x = cx + 7
-        tail_start_y = cy + 7
+        tail_start_x = cx + 14   # was cx + 7 (v1)
+        tail_start_y = cy + 14   # was cy + 7 (v1)
         tail.moveTo(tail_start_x, tail_start_y)
-        tail.lineTo(tail_start_x + 14, tail_start_y + 4)
-        tail.lineTo(tail_start_x + 4, tail_start_y + 14)
+        tail.lineTo(tail_start_x + 28, tail_start_y + 8)   # was +14, +4 (v1)
+        tail.lineTo(tail_start_x + 8, tail_start_y + 28)   # was +4, +14 (v1)
         tail.closeSubpath()
         painter.setBrush(EMBER_DEEP)
         painter.drawPath(tail)
@@ -241,7 +243,7 @@ class PointerOverlay(QWidget):
             metrics = QFontMetrics(self._font)
             text_w = metrics.horizontalAdvance(self._label)
             text_h = metrics.height()
-            pad_x, pad_y = 10, 6
+            pad_x, pad_y = 20, 12   # was 10, 6 (v1)
             flag_w = text_w + pad_x * 2
             flag_h = text_h + pad_y * 2
             flag_x = cx + LABEL_OFFSET.x()
@@ -253,8 +255,8 @@ class PointerOverlay(QWidget):
 
             flag_rect = QRectF(flag_x, flag_y, flag_w, flag_h)
             painter.setBrush(CREAM_BG)
-            painter.setPen(QPen(EMBER_PRIMARY, 1.0))
-            painter.drawRoundedRect(flag_rect, 10, 10)
+            painter.setPen(QPen(EMBER_PRIMARY, 2.0))   # was 1.0 (v1) — 2× stroke
+            painter.drawRoundedRect(flag_rect, 20, 20)  # was 10, 10 (v1)
 
             painter.setPen(QPen(INK))
             painter.drawText(flag_rect, Qt.AlignmentFlag.AlignCenter, self._label)

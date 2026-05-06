@@ -112,16 +112,15 @@ THEMES: dict[str, GlyphTheme] = {
     ),
 }
 
-# Final glyph footprint: 96×96 (bumped from 64 after live retest — too
-# subtle on a 27" monitor at arm's length, which is the senior demo
-# context). The window itself is much larger so the pulsing glow and
-# the tooltip pill have room to breathe without their bounding rect
-# leaking out.
-GLYPH_INNER = 96
-GLOW_PAD = 40          # extra room around the glyph for the soft glow
-TOOLTIP_GAP = 18       # space between the glyph and the tooltip pill
-WINDOW_W = 420
-WINDOW_H = 260
+# Final glyph footprint: doubled from 96×96 (v1) for the 2026-05-06 senior
+# demo pass — Margaret has mild visual impairment and judges sit 2–3 m from
+# the screen. WINDOW_W is clamped at the 520 px ceiling (2× would be 840)
+# so the surface still fits a 1440×900 MacBook Air without dominating it.
+GLYPH_INNER = 192      # was 96 (v1)
+GLOW_PAD = 80          # was 40 (v1) — extra room around the glyph for the soft glow
+TOOLTIP_GAP = 36       # was 18 (v1) — space between the glyph and the tooltip pill
+WINDOW_W = 520         # was 420 (v1) — 2× would be 840, clamped at 520 cap
+WINDOW_H = 520         # was 260 (v1) — exactly 2× lands at the cap
 
 
 # ── geometry helpers ───────────────────────────────────────────────────
@@ -319,16 +318,18 @@ class GlyphOverlay(QWidget):
         self._tooltip.setVisible(False)
         self._tooltip.setWordWrap(True)
         self._tooltip.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._tooltip.setMaximumWidth(320)
+        # Max tooltip width was 320 (v1); 2× would be 640, clamped at the 520 cap
+        # so the pill never spills past the wider WINDOW_W.
+        self._tooltip.setMaximumWidth(520)
         self._tooltip.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
         self._tooltip.setStyleSheet(
             "QLabel {"
             "  color: #fbf7f0;"
             "  background-color: rgba(0, 0, 0, 180);"
-            "  border-radius: 14px;"
-            "  padding: 8px 14px;"
+            "  border-radius: 28px;"               # was 14px (v1) — 2× radius
+            "  padding: 16px 28px;"                # was 8px 14px (v1) — 2× padding
             "  font-family: 'Helvetica Neue', 'Helvetica', sans-serif;"
-            "  font-size: 14pt;"
+            "  font-size: 18pt;"                   # was 14pt (v1) — +4 pt for senior readability
             "  font-weight: 500;"
             "}"
         )
@@ -342,17 +343,20 @@ class GlyphOverlay(QWidget):
         self._icon.setGraphicsEffect(self._glow)
         self._glow.setEnabled(False)
 
-        # 1.4 s pulse: blur radius oscillates 12 → 32 → 12 with an in/out
-        # sine so the glow breathes rather than blinks.
+        # 1.4 s pulse: blur radius oscillates 24 → 64 → 24 with an in/out
+        # sine so the glow breathes rather than blinks. Radii doubled from
+        # v1 (was 12 → 32 → 12) so the halo stays proportional to the
+        # bigger glyph footprint.
         self._glow_anim = QPropertyAnimation(self._glow, b"blurRadius", self)
         self._glow_anim.setDuration(1400)
-        self._glow_anim.setKeyValueAt(0.0, 12.0)
-        self._glow_anim.setKeyValueAt(0.5, 32.0)
-        self._glow_anim.setKeyValueAt(1.0, 12.0)
+        self._glow_anim.setKeyValueAt(0.0, 24.0)   # was 12.0 (v1)
+        self._glow_anim.setKeyValueAt(0.5, 64.0)   # was 32.0 (v1)
+        self._glow_anim.setKeyValueAt(1.0, 24.0)   # was 12.0 (v1)
         self._glow_anim.setLoopCount(-1)
         self._glow_anim.setEasingCurve(QEasingCurve.Type.InOutSine)
 
-        # 2 s bob for ``suspicious``: a 4 px upward drift and back.
+        # 2 s bob for ``suspicious``: an 8 px upward drift and back
+        # (was 4 px in v1) so the motion still reads at 2× scale.
         self._bob_anim = QPropertyAnimation(self._icon, b"pos", self)
         self._bob_anim.setDuration(2000)
         self._bob_anim.setEasingCurve(QEasingCurve.Type.InOutSine)
@@ -430,7 +434,7 @@ class GlyphOverlay(QWidget):
 
         if theme.glow is not None:
             self._glow.setColor(self._glow_color(theme.glow))
-            self._glow.setBlurRadius(12.0)
+            self._glow.setBlurRadius(24.0)   # was 12.0 (v1)
             self._glow.setEnabled(True)
             self._glow_anim.start()
         else:
@@ -438,7 +442,7 @@ class GlyphOverlay(QWidget):
             self._glow.setBlurRadius(0.0)
 
         if level == "suspicious":
-            up = QPoint(self._icon_base_pos.x(), self._icon_base_pos.y() - 4)
+            up = QPoint(self._icon_base_pos.x(), self._icon_base_pos.y() - 8)  # was -4 (v1)
             self._bob_anim.setKeyValueAt(0.0, self._icon_base_pos)
             self._bob_anim.setKeyValueAt(0.5, up)
             self._bob_anim.setKeyValueAt(1.0, self._icon_base_pos)
@@ -455,7 +459,9 @@ class GlyphOverlay(QWidget):
         # the pill is just-as-wide-as-it-needs.
         self._tooltip.adjustSize()
         hint = self._tooltip.sizeHint()
-        width = max(80, min(320, hint.width()))
+        # Bounds doubled from v1 (was max(80, min(320, …))) — the wider
+        # ceiling matches the bigger setMaximumWidth above.
+        width = max(160, min(520, hint.width()))
         height = self._tooltip.heightForWidth(width) if self._tooltip.wordWrap() else hint.height()
         if height <= 0:
             height = hint.height()
@@ -492,8 +498,10 @@ class GlyphOverlay(QWidget):
             from PyQt6.QtGui import QCursor
 
             pos = QCursor.pos()
-            target_x = pos.x() + 24 - self._icon_base_pos.x()
-            target_y = pos.y() + 24 - self._icon_base_pos.y()
+            # Cursor anchor offset bumped 24 → 36 (+50%) so the bigger
+            # glyph clears the cursor hotspot.
+            target_x = pos.x() + 36 - self._icon_base_pos.x()
+            target_y = pos.y() + 36 - self._icon_base_pos.y()
             self.move(target_x, target_y)
             return
 
@@ -502,8 +510,10 @@ class GlyphOverlay(QWidget):
         # URL bar ≈ 80–120 px) so it doesn't sit on top of native buttons
         # like Chrome's Share / Profile / extensions row, which produced
         # confusing overlap with browser-native tooltips during testing.
-        margin_right = 32
-        margin_top = 120
+        # Margins bumped ~50 % from v1 (was 32 / 120) so the bigger surface
+        # doesn't clip the screen edge.
+        margin_right = 48   # was 32 (v1)
+        margin_top = 180    # was 120 (v1)
         glyph_right_in_window = self._icon_base_pos.x() + GLYPH_INNER
         target_x = avail.right() - margin_right - glyph_right_in_window
         target_y = avail.top() + margin_top - self._icon_base_pos.y()
