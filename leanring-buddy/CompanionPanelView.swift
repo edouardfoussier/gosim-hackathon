@@ -92,8 +92,8 @@ struct CompanionPanelView: View {
                     .frame(width: 8, height: 8)
                     .shadow(color: statusDotColor.opacity(0.6), radius: 4)
 
-                Text("Clicky")
-                    .font(.system(size: 14, weight: .semibold))
+                Text("Xiexie")
+                    .font(.system(size: 22, weight: .semibold))
                     .foregroundColor(DS.Colors.textPrimary)
             }
 
@@ -127,52 +127,51 @@ struct CompanionPanelView: View {
     @ViewBuilder
     private var permissionsCopySection: some View {
         if companionManager.hasCompletedOnboarding && companionManager.allPermissionsGranted {
-            Text("Hold Control+Option to talk.")
-                .font(.system(size: 12, weight: .medium))
+            Text("Hold Control + Option to talk to Xiexie.")
+                .font(.system(size: 18, weight: .medium))
                 .foregroundColor(DS.Colors.textSecondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
         } else if companionManager.allPermissionsGranted && !companionManager.hasSubmittedEmail {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Drop your email to get started.")
-                    .font(.system(size: 12, weight: .medium))
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Almost ready, Michel.")
+                    .font(.system(size: 18, weight: .medium))
                     .foregroundColor(DS.Colors.textSecondary)
-                Text("If I keep building this, I'll keep you in the loop.")
-                    .font(.system(size: 11))
+                Text("Type your email so we can keep your wiki up to date.")
+                    .font(.system(size: 16))
                     .foregroundColor(DS.Colors.textTertiary)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         } else if companionManager.allPermissionsGranted {
-            Text("You're all set. Hit Start to meet Clicky.")
-                .font(.system(size: 12, weight: .medium))
+            Text("You're all set. Press Start to wake Xiexie up.")
+                .font(.system(size: 18, weight: .medium))
                 .foregroundColor(DS.Colors.textSecondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
         } else if companionManager.hasCompletedOnboarding {
-            // Permissions were revoked after onboarding — tell user to re-grant
-            VStack(alignment: .leading, spacing: 6) {
+            VStack(alignment: .leading, spacing: 8) {
                 Text("Permissions needed")
-                    .font(.system(size: 12, weight: .bold))
+                    .font(.system(size: 18, weight: .bold))
                     .foregroundColor(DS.Colors.textSecondary)
 
-                Text("Some permissions were revoked. Grant all four below to keep using Clicky.")
-                    .font(.system(size: 11))
+                Text("Some permissions were revoked. Grant all four below so Xiexie can keep watching out for you.")
+                    .font(.system(size: 16))
                     .foregroundColor(DS.Colors.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         } else {
-            VStack(alignment: .leading, spacing: 6) {
-                Text("Hi, I'm Farza. This is Clicky.")
-                    .font(.system(size: 12, weight: .bold))
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Hi Michel. I'm Xiexie.")
+                    .font(.system(size: 19, weight: .bold))
                     .foregroundColor(DS.Colors.textSecondary)
 
-                Text("A side project I made for fun to help me learn stuff as I use my computer.")
-                    .font(.system(size: 11))
+                Text("Your AI grandchild. I look at your screen when you ask, I read your emails out loud, and most of all I keep an eye on the scams that try to trick you.")
+                    .font(.system(size: 16))
                     .foregroundColor(DS.Colors.textTertiary)
                     .fixedSize(horizontal: false, vertical: true)
 
-                Text("Nothing runs in the background. Clicky will only take a screenshot when you press the hot key. So, you can give that permission in peace. If you are still sus, eh, I can't do much there champ.")
-                    .font(.system(size: 11))
-                    .foregroundColor(Color(red: 0.9, green: 0.4, blue: 0.4))
+                Text("Nothing runs in the background. I only take a screenshot when you hold Control + Option. Your microphone is silent until you press it.")
+                    .font(.system(size: 15))
+                    .foregroundColor(Color(red: 0.95, green: 0.55, blue: 0.25))
                     .fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -555,7 +554,7 @@ struct CompanionPanelView: View {
                     .foregroundColor(DS.Colors.textTertiary)
                     .frame(width: 16)
 
-                Text("Show Clicky")
+                Text("Show Xiexie")
                     .font(.system(size: 13, weight: .medium))
                     .foregroundColor(DS.Colors.textSecondary)
             }
@@ -688,7 +687,7 @@ struct CompanionPanelView: View {
                 HStack(spacing: 6) {
                     Image(systemName: "power")
                         .font(.system(size: 11, weight: .medium))
-                    Text("Quit Clicky")
+                    Text("Quit Xiexie")
                         .font(.system(size: 12, weight: .medium))
                 }
                 .foregroundColor(DS.Colors.textTertiary)

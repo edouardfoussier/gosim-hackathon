@@ -88,24 +88,41 @@ enum DS {
         static let blue900 = Color(hex: "#1e3a8a")
         static let blue950 = Color(hex: "#172554")
 
-        // ── Accent (derived from blue scale) ───────────────────────
-        // The primary fill is Blue 600; hover darkens to Blue 700.
+        // ── Ember scale (Xiexie palette, replaces Clicky's blue) ────
+        // Warm cream + ember orange, picked to feel grandparent-friendly
+        // — much warmer than Clicky's tech-blue. Same numeric naming as
+        // the Tailwind scale so any "blue600 → ember600" substitutions
+        // map 1:1 if a future code path wants direct numeric refs.
+        static let ember50  = Color(hex: "#fff7ed")
+        static let ember100 = Color(hex: "#ffedd5")
+        static let ember200 = Color(hex: "#fed7aa")
+        static let ember300 = Color(hex: "#fdba74")
+        static let ember400 = Color(hex: "#fb923c")
+        static let ember500 = Color(hex: "#d87a38")
+        static let ember600 = Color(hex: "#b05826")
+        static let ember700 = Color(hex: "#8a3f1a")
+        static let ember800 = Color(hex: "#7a2e0e")
+        static let ember900 = Color(hex: "#5c2e12")
+        static let ember950 = Color(hex: "#3d2a1b")
+
+        // ── Accent (Xiexie ember replaces Clicky blue) ──────────────
+        // Primary fill is ember600 (#b05826); hover darkens to
+        // ember700. Contrast against white > 4.6:1 (WCAG AA).
 
         /// Accent fill — used for solid button backgrounds.
-        /// #2563eb → ~5.1:1 contrast with white text (WCAG AA).
-        static let accent = blue600
+        static let accent = ember600
 
-        /// Accent hover — slightly darker blue for hover state.
-        /// #1d4ed8 → ~6.5:1 contrast with white text (WCAG AA+).
-        static let accentHover = blue700
+        /// Accent hover — slightly darker ember for hover state.
+        static let accentHover = ember700
 
-        /// Accent text — bright blue used for accent-colored text and icons
-        /// on dark backgrounds (links, active nav items, highlighted labels).
-        static let accentText = blue400
+        /// Accent text — bright ember used for accent-colored text and
+        /// icons on the dark cream-tinted ink background.
+        static let accentText = ember400
 
-        /// Very subtle accent tint — used for selected item backgrounds (e.g. current step
-        /// in the sidebar). Low opacity so it doesn't overpower.
-        static let accentSubtle = blue500.opacity(0.10)
+        /// Very subtle accent tint — used for selected item backgrounds
+        /// (e.g. current step in the sidebar). Low opacity so it
+        /// doesn't overpower the calm cream surface.
+        static let accentSubtle = ember500.opacity(0.10)
 
         // ── Semantic Colors ──────────────────────────────────────────
 
@@ -141,7 +158,9 @@ enum DS {
         /// The blue cursor/bubble color used in OverlayWindow.
         /// Kept distinct from the accent since it serves a different purpose
         /// (screen overlay vs in-app UI).
-        static let overlayCursorBlue = Color(hex: "#3380FF")
+        // Was Clicky's #3380FF blue — swapped to ember so the cursor
+        // companion matches Xiexie's warm cream/ember palette.
+        static let overlayCursorBlue = Color(hex: "#B05826")
 
         // ── Floating Button Gradient ─────────────────────────────────
 

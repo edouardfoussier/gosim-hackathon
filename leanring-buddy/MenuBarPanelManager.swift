@@ -32,8 +32,14 @@ final class MenuBarPanelManager: NSObject {
     private var dismissPanelObserver: NSObjectProtocol?
 
     private let companionManager: CompanionManager
-    private let panelWidth: CGFloat = 320
-    private let panelHeight: CGFloat = 380
+    // Bumped 1.6× from Clicky's 320×380 — the panel was sized for a
+    // millennial trying-to-look-cool aesthetic; Xiexie's persona is a
+    // 78-year-old who needs every label legible from across his
+    // kitchen. Width up so 18pt copy doesn't wrap awkwardly, height
+    // up so the four-permissions list + email field + start button
+    // breathe instead of cramming.
+    private let panelWidth: CGFloat = 520
+    private let panelHeight: CGFloat = 600
 
     init(companionManager: CompanionManager) {
         self.companionManager = companionManager
