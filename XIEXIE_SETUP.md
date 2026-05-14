@@ -1,21 +1,24 @@
 # Xiexie setup — fork of Clicky for the GOSIM 2026 demo
 
-This is a Plan B fork of [Clicky](https://github.com/farzaa/clicky)
-adapted for the **Z.AI Innovation Award**: a senior-friendly AI
-grandchild that protects from email scams, all running through Z.AI
-GLM-4.6 and GLM-4.5V. The hard parts (menu-bar app, push-to-talk,
-ScreenCaptureKit, cursor pointing) are all Clicky's MIT-licensed
-work; we layer on top:
+> The canonical setup walk-through is now in [`README.md`](README.md). This
+> file is the quick-reference cheat sheet we kept open during judging.
+
+This is a fork of [Clicky](https://github.com/farzaa/clicky)
+adapted for the **Z.AI Innovation track** at GOSIM 2026: a senior-
+friendly AI grandchild that protects from email scams, all running
+through Z.AI GLM-4.6 and GLM-4.5V. The hard parts (menu-bar app,
+push-to-talk, ScreenCaptureKit, cursor pointing) are all Clicky's
+MIT-licensed work; we layer on top:
 
 - ``worker/`` — Anthropic-compatible proxy that translates the Mac
   app's Claude payload into Z.AI ``/chat/completions`` and re-emits
   the SSE stream back as Anthropic events. The Swift code is
   **untouched** for LLM calls.
-- ``data/`` — Margaret persona (legacy seed; we'll re-author for
-  Michel Antoine in a follow-up commit), six 2026 scam ``.eml``
-  fixtures, and dated scam-pattern entries in ``scam_alerts.md``.
-- ``XIEXIE_LEGACY.md`` — the old CLAUDE.md, kept for reference
-  (skill prompts, demo runthrough).
+- ``data/`` — Michel Antoine persona seed in ``data/wiki/``, six
+  2026 European scam ``.eml`` fixtures in ``data/demo/eml/``, and
+  dated scam-pattern entries in ``data/wiki/scam_alerts.md``.
+- ``XIEXIE_LEGACY.md`` — the pre-fork dev harness, kept as a
+  journey log (decisions, ADRs, skill prompts).
 
 ## One-time setup (15 minutes)
 
@@ -139,12 +142,3 @@ The Swift LLM payload format is unchanged (still Anthropic Messages),
 which is why the model identifier ``claude-sonnet-4-6`` still appears
 in ``ClaudeAPI.swift``. The Worker translates it to ``glm-4.6`` (or
 ``glm-4.5v`` if any image block is present) before forwarding.
-
-## What's still TODO
-
-- [ ] Re-author ``data/wiki/`` for Michel Antoine persona
-- [ ] System-prompt injection for senior tone + scam-shield priors
-- [ ] 2× UI scale across CompanionPanelView + OverlayWindow for senior
-      visibility (color tokens already exist in ``DesignSystem.swift``)
-- [ ] App icon + tray glyph rebrand (ember/cream Xiexie palette)
-- [ ] Demo dry runs
