@@ -1,22 +1,20 @@
-# Xiexie 谢谢 — an AI grandchild for seniors
+# 🏆 GOSIM AGENTIC HACKATHON 2026
 
-> Built solo in 36 hours at the **GOSIM Agentic Hackathon 2026**
-> (Paris, Station F, May 5–6). Very grateful — and still a bit in
-> shock — to have come in 🏆 **1st** in the **Z.AI Innovation track**.
+### **Xiexie 谢谢 — an AI grandchild for seniors who get scammed online**
 
-A voice-first macOS companion that helps seniors spot email scams, reads their
-screen out loud, and points at things they can't find. Forked from
-[Farza's Clicky](https://github.com/farzaa/clicky) (MIT) and re-tuned for
-**Z.AI's GLM-4.6 + GLM-4.5V**.
+1st place · Z.AI Innovation track
+
+Swift · macOS 14+ · Cloudflare Workers · Z.AI GLM-4.6 + GLM-4.5V · AssemblyAI · ElevenLabs · openWakeWord
+
+**Voice-first macOS companion that helps seniors spot email scams, reads their screen out loud, and points at things they can't find — built in 36 hours, solo, on Z.AI's GLM models.**
 
 ![Xiexie landing — when your grandchild is busy, your computer can be the next best thing](docs/assets/landing-hero.png)
 
 Live: **[getxiexie.com](https://getxiexie.com)** · 3-min demo: **[getxiexie.com/demo](https://getxiexie.com/demo)**
 
-The persona is **Michel Antoine**, 78, retired in Anglet, France, who lives
-alone since his wife passed two years ago. His daughter lives in London. Most
-days, the riskiest thing on his computer is the next email pretending to be
-the *Caisse Primaire d'Assurance Maladie*.
+The persona is a Michel, Edouard's grandfather, retired in France. Most days,
+the riskiest thing on his computer is the next email pretending to be the
+*Caisse Primaire d'Assurance Maladie*.
 
 > *"When your grandchild is busy, your computer can be the next best thing.
 > Just say… Xiexie."*
@@ -62,12 +60,12 @@ follow-up list, not in `main` yet).
 | Wake | only ⌃⌥ push-to-talk | ⌃⌥ *and* a custom-trained openWakeWord ONNX for *"Xiexie"* (training pipeline + 944 user recordings; runtime integration lives on `feat/wakeword-realtime`, not on `main` yet) |
 | Side-screen alerts | none | a red `!` / amber `?` warning glyph slides in from the screen edge when the scam verdict drops |
 | Demo data | none | six RFC822 `.eml` fixtures of currently-active 2026 European scam patterns, drag-droppable into Mail.app |
-| Memory | none | Karpathy-style LLM-Wiki seeded with the Michel Antoine persona |
+| Memory | none | Karpathy-style LLM-Wiki seeded with the Michel persona |
 
 The Swift code change for the LLM swap is **one line** — the heavy lifting is
 in the Worker (`worker/src/index.ts`). That keeps upstream Clicky as the
-source of truth on everything voice + cursor + screen capture, and isolates
-Xiexie's contributions as a small, reviewable diff.
+source of truth on everything voice + cursor + screen capture, and keeps
+Xiexie's contributions to a small diff.
 
 ---
 
@@ -191,7 +189,7 @@ worker/
   .dev.vars.example                # Template for the three secret keys
 data/
   demo/eml/                        # Six 2026 European scam .eml fixtures
-  wiki/                            # Karpathy LLM-Wiki seed (Michel Antoine persona)
+  wiki/                            # Karpathy LLM-Wiki seed (Michel persona)
 docs/
   assets/landing-hero.png          # Repo hero image
   demo-script-3min.md              # The 3-minute Loom script recorded for judging
@@ -225,9 +223,9 @@ ONNX runtime in Swift, evals on multimodal LLMs), and a lot more to ship.
 
 Xiexie is a fork of [Clicky by Farza](https://github.com/farzaa/clicky) and
 inherits its **MIT license** verbatim. Every Swift source file under
-`leanring-buddy/` is a derivative of Clicky's work — huge thanks to Farza
-for open-sourcing such a clean and well-engineered base. If you build on
-this, please credit him first.
+`leanring-buddy/` is a derivative of Clicky's work — many thanks to Farza
+for open-sourcing such a clean base. If you build on this, please credit him
+first.
 
 The Xiexie persona, the scam-shield system prompt, the Worker LLM translator,
 the ember palette, the senior-scale UI, the side-screen warning glyph, the
@@ -236,7 +234,9 @@ openWakeWord-Xiexie training pipeline, and the European demo fixtures are by
 
 Powered by **Z.AI** credits (GLM-4.6 + GLM-4.5V), **AssemblyAI** credits
 (streaming STT), and **ElevenLabs** credits (warm French Marin voice). Thanks
-to the GOSIM team for hosting the hackathon at Station F, and to the Z.AI
-mentors for taking the time to talk us through GLM's quirks during the night.
+to the GOSIM team for hosting the hackathon at Station F, and to the mentors
+for their time.
 
 Feedback, corrections, ideas — DMs open on [GitHub](https://github.com/edouardfoussier).
+
+🏆 **1st place — Z.AI Innovation track — GOSIM Agentic Hackathon 2026, Paris.**
