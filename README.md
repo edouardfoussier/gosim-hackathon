@@ -125,7 +125,7 @@ Swift as Anthropic-shaped `content_block_delta` events.
 ### Clone + Worker
 
 ```bash
-git clone https://github.com/edouardfoussier/gosim-hackathon.git xiexie
+git clone https://github.com/edouardfoussier/gosim-zai-hack-winner.git xiexie
 cd xiexie
 
 cd worker

@@ -117,7 +117,7 @@ Marin says (paraphrase — actual response varies):
   Voice-first macOS companion that protects seniors from email scams.
   Built on Z.AI GLM-4.6 + GLM-4.5V at the GOSIM 2026 Hackathon (Paris,
   May 5–6). Forked from Clicky (MIT). Repo:
-  https://github.com/edouardfoussier/gosim-hackathon
+  https://github.com/edouardfoussier/gosim-zai-hack-winner
   Landing: https://getxiexie.com
   ```
 - **Privacy**: Anyone with the link
